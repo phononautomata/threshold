@@ -1,0 +1,6 @@
+{
+    "k_min": 3.0,
+    "k_max": 10000.0,
+    "exponent": 3.0,
+    "average_degree": 10.0
+}

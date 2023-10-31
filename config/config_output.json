@@ -1,0 +1,9 @@
+{
+    "agent": true,
+    "agent_raw": true,
+    "cluster": true,
+    "cluster_raw": true,
+    "global": true,
+    "time": false,
+    "time_raw": false
+}

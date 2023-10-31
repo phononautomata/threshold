@@ -1,0 +1,6 @@
+{
+    "exp_flag": 2,
+    "t_max": 500,
+    "nsims_net": 1,
+    "nsims_dyn": 2
+}

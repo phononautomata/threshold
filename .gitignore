@@ -1,0 +1,8 @@
+/target
+/results/
+/lit/
+*.pickle
+*.png
+*.pdf
+*.xlsx
+*.csv

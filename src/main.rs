@@ -1,33 +1,18 @@
 use clap::Parser;
 use threshold::exps::{
-    ArgsLine,
-    //ArgsNetwork, 
-    //ArgsOpinion, 
-    //ArgsEpidemic,
-    //ArgsVaccination, 
-    //ArgsDataDrivenUS, 
-    //ArgsExperiment, 
+    Args,
     run_exp1_homogeneous, 
-    run_exp2_datadriven
+    run_exp2_datadriven_thresholds,
+    run_exp3_multilayer_thresholds,
 };
 
 fn main() {
-    let input_args = ArgsLine::parse();
+    let input_args = Args::parse();
 
-    match input_args.exp_flag {
-        1 => run_exp1_homogeneous(
-            input_args,
-            //ArgsNetwork::parse(), 
-            //ArgsOpinion::parse(), 
-            //ArgsEpidemic::parse(),
-            //ArgsVaccination::parse(), 
-        ),
-        2 => run_exp2_datadriven(
-            input_args,
-            //ArgsNetwork::parse(), 
-            //ArgsEpidemic::parse(),
-            //ArgsDataDrivenUS::parse(),
-        ),
+    match input_args.experiment_id {
+        1 => run_exp1_homogeneous(input_args),
+        2 => run_exp2_datadriven_thresholds(input_args),
+        3 => run_exp3_multilayer_thresholds(input_args),
         _ => panic!(),
     };
 }

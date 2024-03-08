@@ -1,285 +1,190 @@
-//use std::path::PathBuf;
 use clap::Parser;
 use serde_pickle::ser::SerOptions;
-//use config::{Config, File};
-//use std::time::SystemTime;
 
-use crate::agent::SeedModel;
-use crate::analysis::{compute_beta_from_r0, compute_cluster_stats, compute_cluster_distribution, compute_agent_stats, compute_agent_distribution};
+use crate::agent::{AgentEnsemble, HesitancyAttributionModel, SeedModel};
+use crate::cons::{FILENAME_CONFIG, FILENAME_DATA_AVERAGE_CONTACT, FILENAME_DATA_CONTACT_MATRIX, FILENAME_DATA_POPULATION_AGE, FILENAME_DATA_VACCINATION_ATTITUDE, FOLDER_CONFIG, FOLDER_RESULTS, HEADER_AGENT, HEADER_CLUSTER, HEADER_GLOBAL, HEADER_TIME, PAR_NETWORK_TRIALS};
 use crate::utils::{
-    OpinionPars, EpidemicPars, AlgorithmPars, Input, 
-    OutputPars, OutputEnsemble, SerializeGlobalAssembly, write_file_name, 
-    USState, read_categories, VaccinationPars, 
-    SerializeGlobalAssemblyTwoWaves, SerializedAgentAssemblyTwoWaves, 
-    SerializedTimeSeriesAssemblyTwoWaves, SerializeClusterAssemblyTwoWaves, 
-    select_network_model, convert_hm_value_to_f64, load_json_data, 
-    convert_hm_value_to_bool, read_degree
+    build_normalized_cdf, compute_beta_from_r0, compute_cluster_distribution, compute_cluster_stats, compute_interlayer_probability_matrix, compute_intralayer_average_degree, count_underaged, load_json_config, read_key_and_f64_from_json, read_key_and_matrixf64_from_json, read_key_and_vecf64_from_json, write_file_name, AlgorithmPars, EpidemicPars, Input, OpinionPars, OutputEnsemble, OutputPars, SerializeClusterAssemblyTwoWaves, SerializeGlobalAssemblyTwoWaves, SerializedAgentAssemblyTwoWaves, SerializedTimeSeriesAssemblyTwoWaves, USState, VaccinationPars
 };
 use crate::core::{
     watts_sir_coupled_model, 
-    datadriven_watts_sir_coupled_model, 
+    watts_sir_coupled_model_datadriven_thresholds, 
+    watts_sir_coupled_model_multilayer, 
 };
 
 use netrust::network::Network;
 use netrust::utils::{
     NetworkModel, 
-    NetworkPars, 
-    build_network_parameter_enum_from_map, 
+    NetworkPars,
 };
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
-pub struct ArgsLine {
+pub struct Args {
+    #[clap(long, value_parser, default_value_t = 0.0)]
+    pub active_fraction: f64,
+    #[clap(long, value_parser, default_value_t = true)]
+    pub age_flag: bool,
+    #[clap(long, value_parser, default_value_t = 18)]
+    pub age_threshold: usize,
+    #[clap(long, value_parser, default_value_t = true)]
+    pub agent_flag: bool,
+    #[clap(long, value_parser, default_value_t = false)]
+    pub agent_raw_flag: bool,
     #[clap(long, value_parser, default_value_t = 10)]
     pub average_degree: usize,
-    #[clap(long, value_parser, default_value_t = 20000)]
-    pub n: usize,
-    #[clap(long, value_parser, default_value = "erdos-renyi")]
-    pub net_id: NetworkModel,
-    #[clap(long, value_parser, default_value_t = 0.5)]
-    pub active_fraction: f64,
-    #[clap(long, value_parser, default_value_t = 0.1)]
-    pub threshold: f64,
-    #[clap(long, value_parser, default_value_t = 0.0)]
-    pub zealot_fraction: f64,
+    #[clap(long, value_parser, default_value_t = false)]
+    pub cluster_flag: bool,
+    #[clap(long, value_parser, default_value_t = false)]
+    pub cluster_raw_flag: bool,
+    #[clap(long, value_parser, default_value_t = false)]
+    pub config_flag: bool,
+    #[clap(long, value_parser, default_value_t = false)]
+    pub degree_flag: bool,
+    #[clap(long, value_parser, default_value_t = 3)]
+    pub experiment_id: usize,
+    #[clap(long, value_parser, default_value_t = true)]
+    pub global_flag: bool,
+    #[clap(long, value_parser, default_value = "random")]
+    pub hesitancy_attribution_model: HesitancyAttributionModel,
     #[clap(long, value_parser, default_value_t = 0.0)]
     pub immunity_decay: f64,
-    #[clap(long, value_parser, default_value_t = 0.46)]
+    #[clap(long, value_parser, default_value_t = 0.0)]
     pub infection_rate: f64,
     #[clap(long, value_parser, default_value_t = 0.2)]
     pub infection_decay: f64,
+    #[clap(long, value_parser, default_value_t = 0)]
+    pub maximum_degree: usize,
+    #[clap(long, value_parser, default_value_t = 0)]
+    pub minimum_degree: usize,
+    #[clap(long, value_parser, default_value = "erdos-renyi")]
+    pub network_model: NetworkModel,
+    #[clap(long, value_parser, default_value_t = 100000)]
+    pub network_size: usize,
+    #[clap(long, value_parser, default_value_t = 10)]
+    pub nsims_dyn: usize,
+    #[clap(long, value_parser, default_value_t = 30)]
+    pub nsims_net: usize,
+    #[clap(long, value_parser, default_value_t = 20)]
+    pub nseeds: usize,
+    #[clap(long, value_parser, default_value_t = 1.0)]
+    pub powerlaw_exponent: f64,
+    #[clap(long, value_parser, default_value_t = true)]
+    pub rebuild_flag: bool,
+    #[clap(long, value_parser, default_value_t = false)]
+    pub rebuild_raw_flag: bool,
+    #[clap(long, value_parser, default_value_t = 1.0)]
+    pub rewiring_probability: f64,
+    #[clap(long, value_parser, default_value_t = 1.5)]
+    pub r0: f64,
+    #[clap(long, value_parser, default_value_t = 0.0)]
+    pub r0_w2: f64,
     #[clap(long, value_parser, default_value_t = false)]
     pub secondary_outbreak: bool,
     #[clap(long, value_parser, default_value = "top-degree-neighborhood")]
     pub seed_model: SeedModel,
-    #[clap(long, value_parser, default_value_t = 10)]
-    pub seeds: usize,
-    #[clap(long, value_parser, default_value_t = 1.5)]
-    pub r0: f64,
-    #[clap(long, value_parser, default_value_t = 1.5)]
-    pub r0_w2: f64,
+    #[clap(long, value_parser, default_value_t = 500)]
+    pub t_max: usize,
+    #[clap(long, value_parser, default_value_t = 0.0)]
+    pub threshold: f64,
+    #[clap(long, value_parser, default_value_t = false)]
+    pub time_flag: bool,
+    #[clap(long, value_parser, default_value_t = false)]
+    pub time_raw_flag: bool,
+    #[clap(long, value_parser, default_value_t = true)]
+    pub underage_correction_flag: bool,
+    #[clap(long, value_parser, default_value = "massachusetts")]
+    pub usa_id: USState,
     #[clap(long, value_parser, default_value_t = 0.0)]
     pub vaccination_decay: f64,
     #[clap(long, value_parser, default_value_t = 0.005)]
     pub vaccination_rate: f64,
-    #[clap(long, value_parser, default_value = "massachusetts")]
-    pub usa_id: USState,
-    #[clap(long, value_parser, default_value_t = 2)]
-    pub exp_flag: usize,
-    #[clap(long, value_parser, default_value_t = 25)]
-    pub nsims_dyn: usize,
-    #[clap(long, value_parser, default_value_t = 25)]
-    pub nsims_net: usize,
-    #[clap(long, value_parser, default_value_t = 500)]
-    pub t_max: usize,
-    #[clap(long, value_parser, default_value_t = false)]
-    pub agent_flag: bool,
-    #[clap(long, value_parser, default_value_t = false)]
-    pub cluster_flag: bool,
-    #[clap(long, value_parser, default_value_t = true)]
-    pub global_flag: bool,
-    #[clap(long, value_parser, default_value_t = false)]
-    pub time_flag: bool,
-}
-
-/// Input arguments
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-pub struct ArgsNetwork {
-    #[clap(long, value_parser, default_value_t = 10)]
-    pub average_degree: usize,
-    #[clap(long, value_parser, default_value_t = 20000)]
-    pub n: usize,
-    #[clap(long, value_parser, default_value = "erdos-renyi")]
-    pub net_id: NetworkModel,
-}
-
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-pub struct ArgsOpinion {
-    #[clap(long, value_parser, default_value_t = 0.1)]
-    pub active_fraction: f64,
-    #[clap(long, value_parser, default_value_t = 0.1)]
-    pub threshold: f64,
     #[clap(long, value_parser, default_value_t = 0.0)]
     pub zealot_fraction: f64,
 }
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-pub struct ArgsEpidemic {
-    #[clap(long, value_parser, default_value_t = 0.0)]
-    pub immunity_decay: f64,
-    #[clap(long, value_parser, default_value_t = 0.46)]
-    pub infection_rate: f64,
-    #[clap(long, value_parser, default_value_t = 0.2)]
-    pub infection_decay: f64,
-    #[clap(long, value_parser, default_value_t = false)]
-    pub secondary_outbreak: bool,
-    #[clap(long, value_parser, default_value = "top-degree-neighborhood")]
-    pub seed_model: SeedModel,
-    #[clap(long, value_parser, default_value_t = 10)]
-    pub seeds: usize,
-    #[clap(long, value_parser, default_value_t = 1.5)]
-    pub r0: f64,
-    #[clap(long, value_parser, default_value_t = 1.5)]
-    pub r0_w2: f64,
-}
+// EXPERIMENT 1: WATTS-SIR DYNAMICS UNDER HOMOGENEOUS THRESHOLD
+pub fn run_exp1_homogeneous(args: Args) {
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-pub struct ArgsVaccination {
-    #[clap(long, value_parser, default_value_t = 0.0)]
-    pub vaccination_decay: f64,
-    #[clap(long, value_parser, default_value_t = 0.0)]
-    pub vaccination_rate: f64,
-}
+    let mut pars = match args.config_flag {
+        false => {
+            // Set network parameters
+            let npars = NetworkPars {
+                attachment: None,
+                average_degree: Some(args.average_degree),
+                connection_probability: None,
+                initial_cluster_size: None,
+                maximum_degree: Some(args.maximum_degree),
+                minimum_degree: Some(args.minimum_degree),
+                model: args.network_model,
+                powerlaw_exponent: Some(args.powerlaw_exponent),
+                rewiring_probability: Some(args.rewiring_probability),
+                size: args.network_size,
+            };
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-pub struct ArgsDataDrivenUS {
-    #[clap(long, value_parser, default_value = "massachusetts")]
-    pub usa_id: USState,
-}
+            // Set opinion parameters
+            let opars = OpinionPars::new(
+                args.active_fraction, 
+                Some(args.hesitancy_attribution_model),
+                args.threshold, 
+                args.zealot_fraction,
+            );
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-pub struct ArgsExperiment {
-    #[clap(long, value_parser, default_value_t = 1)]
-    pub exp_flag: usize,
-    #[clap(long, value_parser, default_value_t = 35)]
-    pub nsims_dyn: usize,
-    #[clap(long, value_parser, default_value_t = 35)]
-    pub nsims_net: usize,
-    #[clap(long, value_parser, default_value_t = 500)]
-    pub t_max: usize,
-}
+            // Set epidemic parameters
+            let epars = EpidemicPars::new(
+                0.0, 
+                args.infection_decay, 
+                args.infection_rate, 
+                args.nseeds,
+                args.r0,
+                0.0, 
+                false, 
+                args.seed_model,  
+                0.0, 
+                args.vaccination_rate,
+            );
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-pub struct ArgsOutput {
-    #[clap(long, value_parser, default_value_t = false)]
-    pub agent_flag: bool,
-    #[clap(long, value_parser, default_value_t = false)]
-    pub cluster_flag: bool,
-    #[clap(long, value_parser, default_value_t = true)]
-    pub global_flag: bool,
-    #[clap(long, value_parser, default_value_t = false)]
-    pub time_flag: bool,
-}
+            // Set experiment/algorithm parameters
+            let apars = AlgorithmPars::new(
+                args.experiment_id,
+                args.nsims_net, 
+                args.nsims_dyn, 
+                args.t_max
+            );
 
-// SETTING 1: WATTS-SIR DYNAMICS UNDER HOMOGENEOUS THRESHOLD
-pub fn run_exp1_homogeneous(
-    args_lin: ArgsLine,
-    //args_net: ArgsNetwork, 
-    //args_opi: ArgsOpinion,  
-    //args_epi: ArgsEpidemic,
-    //args_vac: ArgsVaccination, 
-) {
-    // Load network parameters into 
-    let network_model = args_lin.net_id;
-    let network_size = args_lin.n;
-    let network_hm = select_network_model(args_lin.net_id);
-    let mut network_hm = convert_hm_value_to_f64(network_hm);
-    network_hm.insert("average_degree".to_string(), args_lin.average_degree as f64);
-    let network_enum = build_network_parameter_enum_from_map(
-        network_model, 
-        network_size, 
-        &network_hm
-    );
+            // Set output flags
+            let oflags = OutputPars::new(
+                args.age_flag,
+                args.agent_flag,
+                args.agent_raw_flag,
+                args.cluster_flag,
+                args.cluster_raw_flag,
+                args.degree_flag,
+                args.global_flag,
+                args.rebuild_flag,
+                args.rebuild_raw_flag,
+                args.time_flag,
+                args.time_raw_flag,
+           );
 
-    // Set network parameters
-    let npars = NetworkPars {
-         n: network_size,
-         model: network_model,
-         pars: network_enum,
+           Input::new(Some(apars), epars, Some(npars), Some(opars), Some(oflags), None)
+        },
+        true => {
+            load_json_config(FILENAME_CONFIG, Some(FOLDER_CONFIG)).unwrap()
+        },
     };
-
-    // Set opinion parameters
-    let opars = OpinionPars::new(
-        args_lin.active_fraction, 
-        args_lin.threshold, 
-        args_lin.zealot_fraction,
-    );
-
-    // Load epidemic parameters
-    let epi_filename = "config_epidemic";
-    let epidemic_hm = load_json_data(epi_filename);
-    let epidemic_hm = convert_hm_value_to_f64(epidemic_hm);
-
-    let seeds = *epidemic_hm.get("seeds").unwrap();
-    let r0 = *epidemic_hm.get("r0").unwrap();
-    let infection_rate = *epidemic_hm.get("infection_rate").unwrap();
-    let infection_decay = *epidemic_hm.get("infection_decay").unwrap();
-
-    // Set epidemic parameters
-    let epars = EpidemicPars::new(
-        0.0, 
-        infection_rate, 
-        infection_decay, 
-        r0,
-        0.0, 
-        false, 
-        args_lin.seed_model, 
-        seeds as usize, 
-        0.0, 
-        args_lin.vaccination_rate,
-    );
-
-    // Load experiment/algorithm parameters
-    let exp_filename = "config_experiment";
-    let experiment_hm = load_json_data(exp_filename);
-    let experiment_hm = convert_hm_value_to_f64(experiment_hm);
-
-    let exp_flag = *experiment_hm.get("exp_flag").unwrap() as usize;
-    let nsims_net = *experiment_hm.get("nsims_net").unwrap() as usize;
-    let nsims_dyn = *experiment_hm.get("nsims_dyn").unwrap() as usize;
-    let t_max = *experiment_hm.get("t_max").unwrap() as usize;
-    
-    // Set experiment/algorithm parameters
-    let apars = AlgorithmPars::new(
-        nsims_net, 
-        nsims_dyn, 
-        t_max
-    );
-
-    // Load output flags
-   let out_filename = "config_output";
-   let output_hm = load_json_data(out_filename);
-   let output_hm = convert_hm_value_to_bool(output_hm);
-
-   let global_flag = *output_hm.get("global").unwrap();
-   let agent_flag = *output_hm.get("agent").unwrap();
-   let agent_raw = *output_hm.get("agent_raw").unwrap();
-   let cluster_flag = *output_hm.get("cluster").unwrap();
-   let cluster_raw = *output_hm.get("cluster_raw").unwrap();
-   let time_flag = *output_hm.get("time").unwrap();
-   let time_raw = *output_hm.get("time_raw").unwrap();
-
-   // Set output flags
-   let oflags = OutputPars::new(
-        agent_flag,
-        agent_raw,
-        cluster_flag,
-        cluster_raw,
-        time_flag,
-        time_raw,
-    );
-
-    // Pack all parameters
-    let mut pars = Input::new(npars, opars, epars, None, apars, oflags);
 
     // Prepare output ensemble to store all realizations results
     let mut output_ensemble = OutputEnsemble::new();
 
     // Loop over network realizations
-    for _ in 0..nsims_net {
+    for _ in 0..pars.algorithm.unwrap().nsims_net {
         // Generate network
         let mut graph = Network::new();
         let mut count = 0;
-        let max_count = 100;
+        let max_count = PAR_NETWORK_TRIALS;
         while count < max_count {
-            graph = graph.set_model(&npars);
+            graph = graph.set_model(&pars.network.unwrap());
             if graph.is_connected_dfs() {
                 println!("Single component network at trial {count}");
                 break;
@@ -290,267 +195,126 @@ pub fn run_exp1_homogeneous(
         //graph.to_pickle(&npars);
 
         // Compute beta from given R0 and empirical network topology
-        let beta = compute_beta_from_r0(r0, infection_decay, &npars, &graph);
+        let beta = compute_beta_from_r0(
+            pars.epidemic.r0, 
+            pars.epidemic.infection_decay, 
+            &pars.network.unwrap(), 
+            &graph,
+        );
         pars.epidemic.infection_rate = beta;
 
         // Watts-SIR coupled dynamics
         watts_sir_coupled_model(&pars, &graph, &mut output_ensemble);
     }
 
-    // Store results
-    if global_flag {
-        // Create a replica for input parameters object
-        let pars_replica = 
-        Input::new(npars, opars, epars, None, apars, oflags);
-        // Assemble global observables
-        let assembled_global_output = 
-        output_ensemble.assemble_global_observables();
-        // Output data to serialize
-        let output_to_serialize = SerializeGlobalAssembly {
-            global: assembled_global_output,
-            pars: pars_replica,
-        };
-        // Serialize output
-        let serialized = serde_pickle::to_vec(
-            &output_to_serialize, 
-            SerOptions::new()
-        ).unwrap();
-      
-        // Write the serialized byte vector to file
-        let global_string = "global_".to_owned() + &exp_flag.to_string();
-        let file_name = write_file_name(&pars, global_string);
-        let path = "results/".to_owned() + &file_name + ".pickle";
-        std::fs::write(path, serialized).unwrap();
-    }
-    
-    if cluster_flag {
-        let assembled_cluster_output = 
-        output_ensemble.assemble_cluster_observables();
-        
-        if cluster_raw {
-            // Load to pickle
-            let serialized = serde_pickle::to_vec(
-                &assembled_cluster_output, 
-                SerOptions::new(),
-            ).unwrap();
-            let cluster_string = "clusters_".to_owned() + &exp_flag.to_string();
-            let file_name = write_file_name(&pars, cluster_string);
-            let path = "results/".to_owned() + &file_name + ".pickle";
-            std::fs::write(path, serialized).unwrap();
-        } else {
-            let cluster_stat_package = compute_cluster_stats(&assembled_cluster_output);
-            let csp_serialized = serde_pickle::to_vec(&cluster_stat_package, SerOptions::new(),).unwrap();
-            let csp_string = "csp_".to_owned() + &exp_flag.to_string();
-            let file_name = write_file_name(&pars, csp_string);
-            let path = "results/".to_owned() + &file_name + ".pickle";
-            std::fs::write(path, csp_serialized).unwrap();
-
-            let cluster_distribution = compute_cluster_distribution(&assembled_cluster_output);
-            let cd_serialized = serde_pickle::to_vec(&cluster_distribution, SerOptions::new(),).unwrap();
-            let cd_string = "cd_".to_owned() + &exp_flag.to_string();
-            let file_name = write_file_name(&pars, cd_string);
-            let path = "results/".to_owned() + &file_name + ".pickle";
-            std::fs::write(path, cd_serialized).unwrap();
-        }
-    }
-    
-    if agent_flag {
-        let assembled_agent_output = 
-        output_ensemble.assemble_agent_observables(&pars);
-
-        if agent_raw {
-            // Load to pickle
-            let serialized = serde_pickle::to_vec(
-                &assembled_agent_output, 
-                SerOptions::new(),
-            ).unwrap();
-            let agents_string = "agents_".to_owned() + &exp_flag.to_string();
-            let file_name = write_file_name(&pars, agents_string);
-            let path = "results/".to_owned() + &file_name + ".pickle";
-            std::fs::write(path, serialized).unwrap();
-        } else {
-            let agent_stat_package = compute_agent_stats(&assembled_agent_output);
-            let asp_serialized = serde_pickle::to_vec(&agent_stat_package, SerOptions::new(),).unwrap();
-            let asp_string = "asp_".to_owned() + &exp_flag.to_string();
-            let file_name = write_file_name(&pars, asp_string);
-            let path = "results/".to_owned() + &file_name + ".pickle";
-            std::fs::write(path, asp_serialized).unwrap();
-
-            let agent_distribution = compute_agent_distribution(&assembled_agent_output);
-            let ad_serialized = serde_pickle::to_vec(&agent_distribution, SerOptions::new(),).unwrap();
-            let ad_string = "ad_".to_owned() + &exp_flag.to_string();
-            let file_name = write_file_name(&pars, ad_string);
-            let path = "results/".to_owned() + &file_name + ".pickle";
-            std::fs::write(path, ad_serialized).unwrap();
-        }
-    }
-    
-    if time_flag {
-        // Assemble time observables
-        let assembled_time_series = 
-        output_ensemble.assemble_time_series(t_max);
-        
-        if time_raw {
-            // Load to pickle
-            let serialized = serde_pickle::to_vec(
-                &assembled_time_series, 
-                SerOptions::new()
-            ).unwrap();
-            let time_string = "time_".to_owned() + &exp_flag.to_string();
-            let file_name = write_file_name(&pars, time_string);
-            let path = "results/".to_owned() + &file_name + ".pickle";
-            std::fs::write(path, serialized).unwrap();
-        } else {
-            todo!()
-        }
-    }
+    output_ensemble.save_to_pickle(&pars);
 }
 
-// SETTING 2: WATTS-SIR DYNAMICS WITH DATA-DRIVEN VACCINATION THRESHOLDS
-pub fn run_exp2_datadriven(
-    args_lin: ArgsLine,
-    //args_net: ArgsNetwork, 
-    //args_epi: ArgsEpidemic,
-    //args_dat: ArgsDataDrivenUS,
-) {
+// EXPERIMENT 2: WATTS-SIR DYNAMICS WITH SURVEY-BASED VACCINATION THRESHOLDS
+pub fn run_exp2_datadriven_thresholds(args: Args) {
 
-    // Average degree data
-    let dd_degree_filename = "average_contacts_data";
-    let average_degree: f64 = read_degree(args_lin.usa_id, dd_degree_filename);
-    let average_degree: usize = average_degree.ceil() as usize;
+    let mut pars = match args.config_flag {
+        false => {
+            // Set network parameters
+            let npars = NetworkPars {
+                attachment: None,
+                average_degree: Some(args.average_degree),
+                connection_probability: None,
+                initial_cluster_size: None,
+                maximum_degree: Some(args.maximum_degree),
+                minimum_degree: Some(args.minimum_degree),
+                model: args.network_model,
+                powerlaw_exponent: Some(args.powerlaw_exponent),
+                rewiring_probability: Some(args.rewiring_probability),
+                size: args.network_size,
+            };
 
-    // Load network parameters into 
-    let network_model = args_lin.net_id;
-    let network_size = args_lin.n;
-    let network_hm = select_network_model(args_lin.net_id);
-    let mut network_hm = convert_hm_value_to_f64(network_hm);
-    network_hm.insert("average_degree".to_string(), average_degree as f64);
-    let network_enum = build_network_parameter_enum_from_map(
-        network_model, 
-        network_size, 
-        &network_hm
-    );
+            // Set opinion parameters
+            let opars = OpinionPars::new(
+                args.active_fraction, 
+                Some(args.hesitancy_attribution_model),
+                args.threshold, 
+                args.zealot_fraction,
+            );
 
-    let npars = NetworkPars {
-         n: network_size,
-         model: network_model,
-         pars: network_enum,
+            // Set epidemic parameters
+            let epars = EpidemicPars::new(
+                0.0, 
+                args.infection_decay,
+                args.infection_rate, 
+                args.nseeds,
+                args.r0,
+                0.0, 
+                false, 
+                args.seed_model, 
+                0.0, 
+                args.vaccination_rate,
+            );
+
+            // Set experiment/algorithm parameters
+            let apars = AlgorithmPars::new(
+                args.experiment_id,
+                args.nsims_net, 
+                args.nsims_dyn, 
+                args.t_max
+            );
+
+            // Set output flags
+            let oflags = OutputPars::new(
+                args.age_flag,
+                args.agent_flag,
+                args.agent_raw_flag,
+                args.cluster_flag,
+                args.cluster_raw_flag,
+                args.degree_flag,
+                args.global_flag,
+                args.rebuild_flag,
+                args.rebuild_raw_flag,
+                args.time_flag,
+                args.time_raw_flag,
+           );
+
+           Input::new(Some(apars), epars, Some(npars), Some(opars), Some(oflags), None)
+        },
+        true => {
+            load_json_config(FILENAME_CONFIG, Some(FOLDER_CONFIG)).unwrap()
+        },
     };
 
-    // Set opinion parameters
-    let opars = OpinionPars::new(
-        0.0, 
-        0.0, 
-        0.0,
-    );
-
-    // Load epidemic parameters into EpidemicPars struct
-    let epi_filename = "config_epidemic";
-    let epidemic_hm = load_json_data(epi_filename);
-    let epidemic_hm = convert_hm_value_to_f64(epidemic_hm);
+    // Set data-driven average degree
+    let dd_degree_filename =  FILENAME_DATA_AVERAGE_CONTACT;
+    let average_degree: f64 = read_key_and_f64_from_json(args.usa_id, dd_degree_filename);
+    let average_degree: usize = average_degree.ceil() as usize;
+    pars.network.unwrap().average_degree = Some(average_degree); 
     
-    let vac_filename = "config_vaccination";
-    let vaccination_hm = load_json_data(vac_filename);
-    let _vaccination_hm = convert_hm_value_to_f64(vaccination_hm);
+    // Set data-driven vaccination parameters
+    let dd_vac_filename = FILENAME_DATA_VACCINATION_ATTITUDE;
+    let fractions: Vec<f64> = read_key_and_vecf64_from_json(args.usa_id, dd_vac_filename);
+    pars.vaccination.unwrap().already = fractions[0];
+    pars.vaccination.unwrap().soon = fractions[1];
+    pars.vaccination.unwrap().someone = fractions[2];
+    pars.vaccination.unwrap().majority = fractions[3];
+    pars.vaccination.unwrap().never = fractions[4];
 
-    let seeds = *epidemic_hm.get("seeds").unwrap();
-    let r0 = *epidemic_hm.get("r0").unwrap();
-    let infection_rate = *epidemic_hm.get("infection_rate").unwrap();
-    let infection_decay = *epidemic_hm.get("infection_decay").unwrap();
-    
-    let vaccination_rate = args_lin.vaccination_rate; //*vaccination_hm.get("vaccination_rate").unwrap();
-    let secondary_outbreak = epidemic_hm.get("secondary_outbreak").map_or(false, |&value| value != 0.0);
-    let r0_w2 = *epidemic_hm.get("r0_w2").unwrap();
-    
-    let epars = EpidemicPars::new(
-        0.0, 
-        infection_rate, 
-        infection_decay, 
-        r0, 
-        r0_w2, 
-        secondary_outbreak, 
-        args_lin.seed_model, 
-        seeds as usize, 
-        0.0, 
-        vaccination_rate
-    );
-
-    // Load configuration file
-    //let mut config = Config::default();
-    //config.merge(File::with_name("config/default")).unwrap();
-    //let path: String = config.get("general.path").unwrap();
-
-    // Set vaccination parameters
-    //let file_path = PathBuf::from(path).join("data").join("vaccination_data.json");
-    //let file_path = file_path.as_path().to_str().unwrap();
-    let dd_vac_filename = "vaccination_data";
-    let fractions: Vec<f64> = read_categories(args_lin.usa_id, dd_vac_filename);
-    let vpars = VaccinationPars::new(
-       vaccination_rate,
-       0.0,
-       args_lin.usa_id, 
-       fractions[0], 
-       fractions[1], 
-       fractions[2], 
-       fractions[3], 
-       fractions[4],
-    );
-
-    // Load experiment/algorithm parameters
-    let exp_filename = "config_experiment";
-    let experiment_hm = load_json_data(exp_filename);
-    let experiment_hm = convert_hm_value_to_f64(experiment_hm);
-
-    let exp_flag = *experiment_hm.get("exp_flag").unwrap() as usize;
-    let nsims_net = *experiment_hm.get("nsims_net").unwrap() as usize;
-    let nsims_dyn = *experiment_hm.get("nsims_dyn").unwrap() as usize;
-    let t_max = *experiment_hm.get("t_max").unwrap() as usize;
-    
-    let apars = AlgorithmPars::new(
-        nsims_net, 
-        nsims_dyn, 
-        t_max
-    );
-
-    // Set output flags
-   let out_filename = "config_output";
-   let output_hm = load_json_data(out_filename);
-   let output_hm = convert_hm_value_to_bool(output_hm);
-
-   let global_flag = *output_hm.get("global").unwrap();
-   let agent_flag = *output_hm.get("agent").unwrap();
-   let agent_raw = *output_hm.get("agent_raw").unwrap();
-   let cluster_flag = *output_hm.get("cluster").unwrap();
-   let cluster_raw = *output_hm.get("cluster_raw").unwrap();
-   let time_flag = *output_hm.get("time").unwrap();
-   let time_raw = *output_hm.get("time_raw").unwrap();
-
-   let oflags = OutputPars::new(
-        agent_flag,
-        agent_raw,
-        cluster_flag,
-        cluster_raw,
-        time_flag,
-        time_raw,
-    );
-
-    // Pack all parameters
-    let mut pars = Input::new(npars, opars, epars, Some(vpars), apars, oflags);
+    // Set data-driven opinion parameters
+    pars.opinion.unwrap().active_fraction = fractions[0] + fractions[1];
+    pars.opinion.unwrap().threshold = 0.0;
+    pars.opinion.unwrap().zealot_fraction = fractions[4];
 
     // Prepare output ensemble to store all realizations results during 2 waves
     let mut output_ensemble1 = OutputEnsemble::new();
     let mut output_ensemble2 = OutputEnsemble::new();
 
     // Loop over network realizations
-    for nsn in 0..nsims_net {
+    for nsn in 0..pars.algorithm.unwrap().nsims_net {
         println!("Network realization={nsn}");
         
         // Generate network
         let mut graph = Network::new();
         let mut count = 0;
-        let max_count = 100;
+        let max_count = PAR_NETWORK_TRIALS;
         while count < max_count {
-            graph = graph.set_model(&npars);
+            graph = graph.set_model(&pars.network.unwrap());
             if graph.is_connected_dfs() {
                 println!("Single component network at trial {count}");
                 break;
@@ -561,11 +325,16 @@ pub fn run_exp2_datadriven(
         //graph.to_pickle(&npars);
         
         // Compute beta from given R0 and empirical network topology
-        let beta = compute_beta_from_r0(r0, infection_decay, &npars, &graph);
+        let beta = compute_beta_from_r0(
+            pars.epidemic.r0, 
+            pars.epidemic.infection_decay, 
+            &pars.network.unwrap(), 
+            &graph,
+        );
         pars.epidemic.infection_rate = beta;
 
         // Watts-SIR coupled dynamics
-        datadriven_watts_sir_coupled_model(
+        watts_sir_coupled_model_datadriven_thresholds(
             &mut pars, 
             &graph, 
             &mut output_ensemble1, 
@@ -574,148 +343,132 @@ pub fn run_exp2_datadriven(
     }
 
     // Store results
-    if global_flag {
-        // Create a replica for input parameters object
-        let vpars = vpars;
-        let pars_replica = 
-        Input::new(npars, opars, epars, Some(vpars), apars, oflags);
-        // Assemble global observables
+    if pars.output.unwrap().global {
+
+        let pars_replica = Input::new(pars.algorithm, pars.epidemic, pars.network, pars.opinion, pars.output, pars.vaccination);
+    
         let assembled_global_output1 = 
         output_ensemble1.assemble_global_observables();
         let assembled_global_output2 = 
         output_ensemble2.assemble_global_observables();
-        // Output data to serialize
+    
         let output_to_serialize = SerializeGlobalAssemblyTwoWaves {
             global_w1: assembled_global_output1,
             global_w2: assembled_global_output2,
             pars: pars_replica,
         };
-        // Serialize output
+    
         let serialized = 
         serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
 
-        // Write the serialized byte vector to file
-        let exp_string = format!("{}_{}", exp_flag, args_lin.usa_id);
-        let global_string = "global_".to_owned() + &exp_string.to_string();
-        let file_name = write_file_name(&pars, global_string);
-        let path = "results/".to_owned() + &file_name + ".pickle";
+        let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, args.usa_id);
+        let global_string = HEADER_GLOBAL.to_owned() + &exp_string.to_string();
+        let file_name = write_file_name(&pars, global_string, false);
+        let path = FOLDER_RESULTS.to_owned() + &file_name + ".pickle";
         std::fs::write(path, serialized).unwrap();
     }
 
-    if cluster_flag {
-        // Create a replica for input parameters object
-        let vpars = vpars;
-        let pars_replica = 
-        Input::new(npars, opars, epars, Some(vpars), apars, oflags);
-        // Assemble agent observables
+    if pars.output.unwrap().cluster {
+        let pars_replica = Input::new(pars.algorithm, pars.epidemic, pars.network, pars.opinion, pars.output, pars.vaccination);
+    
         let assembled_cluster_output1 = 
         output_ensemble1.assemble_cluster_observables();
         let assembled_cluster_output2 = 
         output_ensemble2.assemble_cluster_observables();
 
-        if cluster_raw {
-            // Output data to serialize
+        if pars.output.unwrap().cluster_raw {
             let output_to_serialize = SerializeClusterAssemblyTwoWaves {
                 cluster_w1: assembled_cluster_output1,
                 cluster_w2: assembled_cluster_output2,
                 pars: pars_replica,
             };
-            // Load to pickle
+
             let serialized = 
             serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
 
-            let exp_string = format!("{}_{}", exp_flag, args_lin.usa_id);        
-            let clusters_string = "clusters_".to_owned() + &exp_string;
-            let file_name = write_file_name(&pars, clusters_string);
-            let path = "results/".to_owned() + &file_name + ".pickle";
+            let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, args.usa_id);        
+            let clusters_string = HEADER_CLUSTER.to_owned() + &exp_string;
+            let file_name = write_file_name(&pars, clusters_string, false);
+            let path = FOLDER_RESULTS.to_owned() + &file_name + ".pickle";
             std::fs::write(path, serialized).unwrap();
         } else {
             let cluster_stat_package1 = compute_cluster_stats(&assembled_cluster_output1);
             let csp1_serialized = serde_pickle::to_vec(&cluster_stat_package1, SerOptions::new(),).unwrap();
-            let csp1_string = "cspw1_".to_owned() + &exp_flag.to_string();
-            let file_name1 = write_file_name(&pars, csp1_string);
-            let path1 = "results/".to_owned() + &file_name1 + ".pickle";
+            let csp1_string = "cspw1_".to_owned() + &pars.algorithm.unwrap().experiment_id.to_string();
+            let file_name1 = write_file_name(&pars, csp1_string, false);
+            let path1 = FOLDER_RESULTS.to_owned() + &file_name1 + ".pickle";
             std::fs::write(path1, csp1_serialized).unwrap();
 
             let cluster_distribution1 = compute_cluster_distribution(&assembled_cluster_output1);
             let cd1_serialized = serde_pickle::to_vec(&cluster_distribution1, SerOptions::new(),).unwrap();
-            let cd1_string = "cdw1_".to_owned() + &exp_flag.to_string();
-            let file_name1 = write_file_name(&pars, cd1_string);
-            let path1 = "results/".to_owned() + &file_name1 + ".pickle";
+            let cd1_string = "cdw1_".to_owned() + &pars.algorithm.unwrap().experiment_id.to_string();
+            let file_name1 = write_file_name(&pars, cd1_string, false);
+            let path1 = FOLDER_RESULTS.to_owned() + &file_name1 + ".pickle";
             std::fs::write(path1, cd1_serialized).unwrap();
 
             let cluster_stat_package2 = compute_cluster_stats(&assembled_cluster_output2);
             let csp2_serialized = serde_pickle::to_vec(&cluster_stat_package2, SerOptions::new(),).unwrap();
-            let csp2_string = "cspw2_".to_owned() + &exp_flag.to_string();
-            let file_name2 = write_file_name(&pars, csp2_string);
-            let path2 = "results/".to_owned() + &file_name2 + ".pickle";
+            let csp2_string = "cspw2_".to_owned() + &pars.algorithm.unwrap().experiment_id.to_string();
+            let file_name2 = write_file_name(&pars, csp2_string, false);
+            let path2 = FOLDER_RESULTS.to_owned() + &file_name2 + ".pickle";
             std::fs::write(path2, csp2_serialized).unwrap();
 
             let cluster_distribution2 = compute_cluster_distribution(&assembled_cluster_output2);
             let cd2_serialized = serde_pickle::to_vec(&cluster_distribution2, SerOptions::new(),).unwrap();
-            let cd2_string = "cdw2_".to_owned() + &exp_flag.to_string();
-            let file_name2 = write_file_name(&pars, cd2_string);
-            let path2 = "results/".to_owned() + &file_name2 + ".pickle";
+            let cd2_string = "cdw2_".to_owned() + &pars.algorithm.unwrap().experiment_id.to_string();
+            let file_name2 = write_file_name(&pars, cd2_string, false);
+            let path2 = FOLDER_RESULTS.to_owned() + &file_name2 + ".pickle";
             std::fs::write(path2, cd2_serialized).unwrap();
         }
     }
 
-    if agent_flag {
-        // Create a replica for input parameters object
-        let vpars = vpars;
+    if pars.output.unwrap().agent {
         let pars_replica = 
-        Input::new(npars, opars, epars, Some(vpars), apars, oflags);
-        // Assemble agent observables
+        Input::new(pars.algorithm, pars.epidemic, pars.network, pars.opinion, pars.output, pars.vaccination);
+    
         let assembled_agent_output1 = 
         output_ensemble1.assemble_agent_observables(&pars);
         let assembled_agent_output2 = 
         output_ensemble2.assemble_agent_observables(&pars);
-        
-        if agent_raw {
-            // Output data to serialize
+
+        if pars.output.unwrap().agent_raw {
             let output_to_serialize = SerializedAgentAssemblyTwoWaves {
                 agent_w1: assembled_agent_output1,
                 agent_w2: assembled_agent_output2,
                 pars: pars_replica,
             };
-            // Load to pickle
+
             let serialized = 
             serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
-            let exp_string = format!("{}_{}", exp_flag, args_lin.usa_id);  
-            let agents_string = "agents_".to_owned() + &exp_string;
-            let file_name = write_file_name(&pars, agents_string);
-            let path = "results/".to_owned() + &file_name + ".pickle";
+            let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, args.usa_id);  
+            let agents_string = HEADER_AGENT.to_owned() + &exp_string;
+            let file_name = write_file_name(&pars, agents_string, false);
+            let path = FOLDER_RESULTS.to_owned() + &file_name + ".pickle";
             std::fs::write(path, serialized).unwrap();
         } else {
             todo!()
         }
     }
 
-    if time_flag {
-        // Create a replica for input parameters object
-        let vpars = vpars;
-        let pars_replica = 
-        Input::new(npars, opars, epars, Some(vpars), apars, oflags);
-        // Assemble time observables
-        let assembled_time_series1 = 
-        output_ensemble1.assemble_time_series(t_max);
-        let assembled_time_series2 = 
-        output_ensemble2.assemble_time_series(t_max);
+    if pars.output.unwrap().time {
+        let pars_replica = Input::new(pars.algorithm, pars.epidemic, pars.network, pars.opinion, pars.output, pars.vaccination);
 
-        if time_raw {
-            // Output data to serialize
+        let assembled_time_series1 = output_ensemble1.assemble_time_series(pars.algorithm.unwrap().t_max);
+        let assembled_time_series2 = output_ensemble2.assemble_time_series(pars.algorithm.unwrap().t_max);
+
+        if pars.output.unwrap().time_raw {
             let output_to_serialize = SerializedTimeSeriesAssemblyTwoWaves {
                 time_w1: assembled_time_series1,
                 time_w2: assembled_time_series2,
                 pars: pars_replica,
             };
-            // Load to pickle
+
             let serialized = 
             serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
-            let exp_string = format!("{}_{}", exp_flag, args_lin.usa_id);  
-            let time_string = "time_".to_owned() + &exp_string;
-            let file_name = write_file_name(&pars, time_string);
-            let path = "results/".to_owned() + &file_name + ".pickle";
+            let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, args.usa_id);  
+            let time_string = HEADER_TIME.to_owned() + &exp_string;
+            let file_name = write_file_name(&pars, time_string, false);
+            let path = FOLDER_RESULTS.to_owned() + &file_name + ".pickle";
             std::fs::write(path, serialized).unwrap();
         } else {
             todo!()
@@ -723,133 +476,146 @@ pub fn run_exp2_datadriven(
     }
 }
 
-// SETTING 3: SYMMETRIC WATTS-SIRS DYNAMICS UNDER HOMOGENEOUS THRESHOLD
-/* 
-pub fn run_exp3_symmetric(args: Args) {
-    // Set network parameters
-    let model = args.net_id;
-    let npars_vec = vec![args.n as f64, args.net_par1, args.net_par2, args.net_par3, args.net_par4];
-    let npars_enum = build_network_parameter_enum(model, &npars_vec);
-    let npars_hm = build_network_parameter_hashmap(args.net_id, &npars_vec);
-    let npars = NetworkPars {
-         n: args.n as usize,
-         model,
-         pars: npars_enum,
+// EXPERIMENT 3: WATTS-SIR DYNAMICS WITH SURVEY-BASED VACCINATION THRESHOLDS IN AGE-STRUCTURED MULTILAYER NETWORK
+pub fn run_exp3_multilayer_thresholds(args: Args) {
+    let mut pars = match args.config_flag {
+        false => {
+            let opars = OpinionPars::new(
+                args.active_fraction, 
+                Some(args.hesitancy_attribution_model),
+                args.threshold, 
+                args.zealot_fraction,
+            );
+
+            let epars = EpidemicPars::new(
+                0.0, 
+                args.infection_decay,
+                args.infection_rate, 
+                args.nseeds,
+                args.r0,
+                0.0,
+                false,
+                args.seed_model, 
+                0.0, 
+                args.vaccination_rate,
+            );
+
+            let npars = NetworkPars {
+                attachment: None,
+                average_degree: Some(0),
+                connection_probability: None,
+                initial_cluster_size: None,
+                maximum_degree: None,
+                minimum_degree: None,
+                model: args.network_model,
+                powerlaw_exponent: None,
+                rewiring_probability: None,
+                size: args.network_size,
+            };
+
+            let apars = AlgorithmPars::new(
+                args.experiment_id,
+                args.nsims_dyn, 
+                args.nsims_net, 
+                args.t_max
+            );
+
+            let oflags = OutputPars::new(
+                args.age_flag,
+                args.agent_flag,
+                args.agent_raw_flag,
+                args.cluster_flag,
+                args.cluster_raw_flag,
+                args.degree_flag,
+                args.global_flag,
+                args.rebuild_flag,
+                args.rebuild_raw_flag,
+                args.time_flag,
+                args.time_raw_flag,
+            );
+
+            let vpars = VaccinationPars::new(
+                args.age_threshold,
+                0.0, 
+                args.hesitancy_attribution_model,
+                0.0,
+                0.0, 
+                0.0, 
+                0.0, 
+                args.underage_correction_flag,
+                Some(args.usa_id), 
+                0.0, 
+                args.vaccination_rate,
+            );
+
+           Input::new(Some(apars), epars, Some(npars), Some(opars), Some(oflags), Some(vpars))
+        },
+        true => {
+            load_json_config(FILENAME_CONFIG, Some(FOLDER_CONFIG)).unwrap()
+        },
     };
 
-    // Set opinion parameters
-    let opars = OpinionPars::new(
-        args.active_fraction, 
-        args.theta, 
-        0.0
+    let dd_vac_filename = FILENAME_DATA_VACCINATION_ATTITUDE;
+    let fractions: Vec<f64> = read_key_and_vecf64_from_json(
+        pars.vaccination.unwrap().us_state.unwrap(), 
+        dd_vac_filename,
     );
 
-    // Set epidemic parameters
-    let epars = EpidemicPars::new(
-        args.seeds,
-        args.r0,
-        args.infection_rate, 
-        args.infection_decay,
-        args.immunity_decay,
-        args.vaccination_rate,
-        args.vaccination_decay, 
-        args.secondary_outbreak,
-        args.r0_w2,
-    ); 
+    let popultion_filename = FILENAME_DATA_POPULATION_AGE;
+    let mut population_vector: Vec<f64> = read_key_and_vecf64_from_json(pars.vaccination.unwrap().us_state.unwrap(), popultion_filename);
+    let population_cdf = build_normalized_cdf(&mut population_vector);
+    let ngroups =population_vector.len();
 
-    // Set algorithm parameters
-    let apars = AlgorithmPars::new(
-        args.nsims_net, 
-        args.nsims_dyn, 
-        args.t_max
-    );
+    let contact_filename = FILENAME_DATA_CONTACT_MATRIX;
+    let contact_matrix: Vec<Vec<f64>> = read_key_and_matrixf64_from_json(pars.vaccination.unwrap().us_state.unwrap(), contact_filename); 
+    let interlayer_probability_matrix = compute_interlayer_probability_matrix(&contact_matrix);
+    let intralayer_average_degree = compute_intralayer_average_degree(&contact_matrix);
 
-    // Set output flags
-    let oflags = OutputPars::new(
-        args.agent_flag,
-        args.cluster_flag,
-        args.time_flag
-    );
+    let eligible_fraction = if args.underage_correction_flag {
+        let underaged_fraction = count_underaged(&population_vector);
+        1.0 - underaged_fraction 
+    } else {
+        pars.vaccination.as_mut().unwrap().age_threshold = 0;
+        1.0
+    };
 
-    // Pack all parameters
-    let mut pars = Input::new(npars, opars, epars, None, apars, oflags);
+    pars.vaccination.as_mut().unwrap().already = eligible_fraction * fractions[0];
+    pars.vaccination.as_mut().unwrap().soon = eligible_fraction * fractions[1];
+    pars.vaccination.as_mut().unwrap().someone = eligible_fraction * fractions[2];
+    pars.vaccination.as_mut().unwrap().majority = eligible_fraction * fractions[3];
+    pars.vaccination.as_mut().unwrap().never = eligible_fraction * fractions[4];
 
-    // Prepare output ensemble to store all realizations results
+    pars.opinion.as_mut().unwrap().active_fraction = pars.vaccination.unwrap().already + pars.vaccination.unwrap().soon;
+    pars.opinion.as_mut().unwrap().threshold = 0.0;
+    pars.opinion.as_mut().unwrap().zealot_fraction = pars.vaccination.unwrap().never;
+
     let mut output_ensemble = OutputEnsemble::new();
 
-    // Loop over network realizations
-    for _ in 0..args.nsims_net {
-        // Generate network
-        let mut graph = Network::new();
-        let mut count = 0;
-        let max_count = 100;
-        while count < max_count {
-            graph = graph.set_model(args.net_id, &npars_hm);
-            if graph.is_connected_dfs() {
-                println!("Single component network at trial {count}");
-                break;
-            }
-            count += 1;
-        }
-        // Save network
-        let path = "results";
-        graph.to_pickle(model, &npars_vec, path);
-        // Compute beta from given R0 and empirical network topology
-        let beta = compute_beta_from_r0(args.r0, args.infection_decay, &npars, &graph);
+    for nsn in 0..pars.algorithm.unwrap().nsims_net {
+        println!("Network realization={nsn}");
+
+        let mut agent_ensemble = AgentEnsemble::new(pars.network.unwrap().size);
+
+        agent_ensemble.sample_age(&population_cdf);
+
+        agent_ensemble.sample_degree_conditioned_to_age(&intralayer_average_degree);
+
+        let mut intralayer_stubs = agent_ensemble.collect_intralayer_stubs(ngroups);
+
+        agent_ensemble.generate_age_multilayer_network(&interlayer_probability_matrix, &mut intralayer_stubs);
+
+        let r0 = pars.epidemic.r0;
+        let infection_decay = pars.epidemic.infection_decay;
+        let average_degree = agent_ensemble.average_degree();
+        let beta = r0 * infection_decay / average_degree;
         pars.epidemic.infection_rate = beta;
-        // Symmetric Watts-SIRS coupled dynamics
-        symmetric_watts_sirs_coupled_model(&pars, &graph, &mut output_ensemble);
+
+        watts_sir_coupled_model_multilayer(
+            &mut pars,
+            &mut agent_ensemble, 
+            &mut output_ensemble,
+        );
     }
 
-    // Store results
-    if args.global_flag {
-        // Create a replica for input parameters object
-        let pars_replica = Input::new(npars, opars, epars, None, apars, oflags);
-        // Assemble global observables
-        let assembled_global_output = output_ensemble.assemble_global_observables();
-        // Output data to serialize
-        let output_to_serialize = SerializeGlobalAssembly {
-            global: assembled_global_output,
-            pars: pars_replica,
-        };
-        // Serialize output
-        let serialized = serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
-      
-        // Write the serialized byte vector to file
-        let global_string = "global_".to_owned() + &args.exp_flag.to_string();
-        let file_name = write_file_name(&pars, &npars_vec, global_string);
-        let path = "results/".to_owned() + &file_name + ".pickle";
-        std::fs::write(path, serialized).unwrap();
-    }
-    if args.cluster_flag {
-        // Assemble agent observables
-        let assembled_cluster_output = output_ensemble.assemble_cluster_observables();
-        // Load to pickle
-        let serialized = serde_pickle::to_vec(&assembled_cluster_output, SerOptions::new()).unwrap();
-        let agents_string = "clusters_".to_owned() + &args.exp_flag.to_string();
-        let file_name = write_file_name(&pars, &npars_vec, agents_string);
-        let path = "results/".to_owned() + &file_name + ".pickle";
-        std::fs::write(path, serialized).unwrap();
-    }
-    if args.agent_flag {
-        // Assemble agent observables
-        let assembled_agent_output = output_ensemble.assemble_agent_observables(&pars);
-        // Load to pickle
-        let serialized = serde_pickle::to_vec(&assembled_agent_output, SerOptions::new()).unwrap();
-        let agents_string = "agents_".to_owned() + &args.exp_flag.to_string();
-        let file_name = write_file_name(&pars, &npars_vec, agents_string);
-        let path = "results/".to_owned() + &file_name + ".pickle";
-        std::fs::write(path, serialized).unwrap();
-    }
-    if args.time_flag {
-        // Assemble time observables
-        let assembled_time_series = output_ensemble.assemble_time_series(args.t_max);
-        // Load to pickle
-        let serialized = serde_pickle::to_vec(&assembled_time_series, SerOptions::new()).unwrap();
-        let time_string = "time_".to_owned() + &args.exp_flag.to_string();
-        let file_name = write_file_name(&pars, &npars_vec, time_string);
-        let path = "results/".to_owned() + &file_name + ".pickle";
-        std::fs::write(path, serialized).unwrap();
-    }
+    output_ensemble.save_to_pickle(&pars);
 }
-*/

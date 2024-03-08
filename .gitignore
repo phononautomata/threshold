@@ -1,6 +1,7 @@
 /target
 /results/
 /lit/
+/legacy/
 *.pickle
 *.png
 *.pdf

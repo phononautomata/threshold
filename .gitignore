@@ -3,9 +3,9 @@
 /lit/
 /legacy/
 *.pickle
-*.png
 *.pdf
 *.xlsx
 *.csv
 .DS_Store
 .gitignore
+.vscode

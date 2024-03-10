@@ -103,7 +103,7 @@ pub enum Status {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug, Display, clap::ValueEnum)]
-pub enum VaccinationModel {
+pub enum VaccinationPolicy {
     #[serde(rename = "age-adult")]
     AgeAdult,
     #[serde(rename = "age-elder")]
@@ -146,8 +146,12 @@ pub struct Agent {
     pub opinion: Opinion,
     pub status: Status,
     pub threshold: f64,
+    pub vaccination_target: bool,
+    pub activation_potential: Option<usize>,
     pub attitude: Option<Attitude>,
+    pub cascading_threshold: Option<usize>,
     pub convinced_when: Option<usize>,
+    pub effective_threshold: Option<usize>,
     pub final_active_susceptible: Option<usize>,
     pub final_prevalence: Option<usize>,
     pub final_vaccinated: Option<usize>,
@@ -172,7 +176,11 @@ impl Agent {
             opinion: Opinion::Hesitant,
             status: Status::HesSus,
             threshold: 0.0,
+            vaccination_target: true,
+            activation_potential: Some(1),
             attitude: Some(Attitude::Never),
+            cascading_threshold: Some(1),
+            effective_threshold: Some(1),
             final_active_susceptible: None,
             final_prevalence: None,
             final_vaccinated: None,
@@ -187,21 +195,102 @@ impl Agent {
         }
     }
 
+    fn measure_activation_potential(&mut self, agent_ensemble: &mut AgentEnsemble) {
+        let neighbors = self.neighbors.clone();
+        let threshold = self.threshold;
+        let mut cascading_count = 0;
+        let degree = self.degree;
+
+        for neigh in neighbors {
+            let neigh_threshold = agent_ensemble.inner()[neigh].threshold;
+            if neigh_threshold < threshold {
+                cascading_count += 1;
+            }
+        }
+
+        if (cascading_count / degree) as f64 >= threshold {
+            self.activation_potential = Some(1);
+        } else {
+            self.activation_potential = Some(0);
+        }
+    }
+
+    fn measure_average_neighbor_threshold(&mut self, agent_ensemble: &mut AgentEnsemble) -> f64 {
+        let neighbors = self.neighbors.clone();
+        let mut cumulative_neighbor_threshold = 0.0;
+        let degree = self.degree;
+
+        for neigh in neighbors {
+            let neigh_threshold = agent_ensemble.inner()[neigh].threshold;
+            cumulative_neighbor_threshold += neigh_threshold;
+        }
+
+        let average_neighbor_threshold = cumulative_neighbor_threshold / (degree as f64);
+        average_neighbor_threshold
+    }
+
+    pub fn measure_cascading_threshold(&mut self, agent_ensemble: &mut AgentEnsemble) -> usize {
+        let neighbors = self.neighbors.clone();
+        let threshold = self.threshold;
+        let mut cumulative_neighbor_threshold = 0.0;
+        let degree = self.degree;
+
+        for neigh in neighbors {
+            let neigh_threshold = agent_ensemble.inner()[neigh].threshold;
+            cumulative_neighbor_threshold += neigh_threshold;
+        }
+        let average_neighbor_threshold = cumulative_neighbor_threshold / (degree as f64);
+
+        match self.attitude.unwrap() {
+            Attitude::Vaccinated => {
+                0
+            },
+            Attitude::Soon => {
+                0
+            },
+            Attitude::Someone => {
+                if threshold >= average_neighbor_threshold {
+                    0
+                } else {
+                    1
+                }
+            },
+            Attitude::Most => {
+                if threshold >= average_neighbor_threshold {
+                    0
+                } else {
+                    1
+                }
+            },
+            Attitude::Never => {
+                1
+            },
+        }
+    }
+
     fn measure_neighborhood(
         &mut self, 
         agent_ensemble: &mut AgentEnsemble, 
         t: usize,
     ) {
         let neighbors = self.neighbors.clone();
+        let threshold = self.threshold;
         let mut active_susceptible = 0;
+        let mut cascading_count = 0;
+        let degree = self.degree;
         let mut vaccinated = 0;
         let mut zealots = 0;
         let mut prevalence = 0;
 
         for neigh in neighbors {
             let status = agent_ensemble.inner()[neigh].status;
-            let threshold = agent_ensemble.inner()[neigh].threshold;
-            if threshold >= 1.0 {
+            let neigh_threshold = agent_ensemble.inner()[neigh].threshold;
+
+            if neigh_threshold < threshold {
+                cascading_count += 1;
+            }
+
+            if neigh_threshold >= 1.0 {
                 zealots += 1;
             } else {
                 if status == Status::ActSus {
@@ -214,6 +303,12 @@ impl Agent {
                     prevalence += 1;
                 }
             }
+        }
+
+        if (cascading_count / degree) as f64 >= threshold {
+            self.activation_potential = Some(1);
+        } else {
+            self.activation_potential = Some(0);
         }
 
         if t == 0 {
@@ -1530,6 +1625,194 @@ impl AgentEnsemble {
         }
     }
 
+    pub fn set_vaccination_policy_model(&mut self, vaccination_policy: VaccinationPolicy, vaccination_quota: f64) {
+        match vaccination_policy {
+            VaccinationPolicy::AgeAdult => {
+                todo!()
+            },
+            VaccinationPolicy::AgeElder => {
+                self.target_age_elders(vaccination_quota)
+            },
+            VaccinationPolicy::AgeMiddleage => {
+                self.target_age_middleage(vaccination_quota)
+            },
+            VaccinationPolicy::AgeTop => {
+                self.target_age_top(vaccination_quota)
+            },
+            VaccinationPolicy::AgeUnderage => {
+                self.target_age_underage(vaccination_quota)
+            },
+            VaccinationPolicy::AgeYoung => {
+                self.target_age_young_adult(vaccination_quota)
+            },
+            VaccinationPolicy::AgeYoungToElder => {
+                self.target_age_young_to_elder(vaccination_quota)
+            },
+            VaccinationPolicy::Automatic => {
+                self.target_automatic(vaccination_quota)
+            },
+            VaccinationPolicy::ComboElderTop => {
+                todo!()
+            },
+            VaccinationPolicy::ComboYoungTop => {
+                todo!()
+            },
+            VaccinationPolicy::DataDriven => {
+                todo!()
+            },
+            VaccinationPolicy::DegreeBottom => {
+                todo!()
+            },
+            VaccinationPolicy::DegreeRandom => {
+                self.target_random(vaccination_quota)
+            },
+            VaccinationPolicy::DegreeTop => {
+                todo!()
+            },
+            VaccinationPolicy::Random => {
+                self.target_random(vaccination_quota)
+            },
+        }
+    }
+
+    pub fn target_age_elders(&mut self, vaccination_quota: f64) {
+        let mut target_quota = 0.0;
+        let nagents = self.number_of_agents();
+
+        for agent in self.inner_mut() {
+            if target_quota >= vaccination_quota {
+                break;
+            }
+            if agent.age < CONST_UNDERAGE_THRESHOLD {
+                agent.vaccination_target = true;
+                target_quota += 1.0 / nagents as f64;   
+            }
+        }
+    }
+
+    pub fn target_age_middleage(&mut self, vaccination_quota: f64) {
+        let mut target_quota = 0.0;
+        let nagents =self.number_of_agents();
+
+        for agent in self.inner_mut() {
+            if target_quota >= vaccination_quota {
+                break;
+            }
+            if CONST_MIDDLEAGE_THRESHOLD <= agent.age && CONST_ELDER_THRESHOLD > agent.age {
+                agent.vaccination_target = true;
+                target_quota += 1.0 / nagents as f64;   
+            }
+        }
+    }
+
+    pub fn target_age_top(&mut self, vaccination_quota: f64) {
+        let mut target_quota = 0.0;
+        let nagents = self.number_of_agents();
+
+        let mut agents: Vec<_> = self.inner().iter() // Use .iter() to get an iterator over the agents
+        .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
+        .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
+        
+        // Now sort this vector of references by age in descending order
+        agents.sort_by(|a, b| b.age.cmp(&a.age));
+
+        // Map the sorted agent references to their IDs and collect into a vector
+        let older_to_younger: Vec<usize> = agents.iter().map(|agent| agent.id).collect();
+
+        for id in older_to_younger {
+            if target_quota >= vaccination_quota {
+                break;
+            }
+            if self.inner()[id].age < CONST_UNDERAGE_THRESHOLD {
+                self.inner_mut()[id].vaccination_target = true;
+                target_quota += 1.0 / nagents as f64;   
+            }
+        }
+    }
+
+    pub fn target_age_underage(&mut self, vaccination_quota: f64) {
+        let mut target_quota = 0.0;
+        let nagents = self.number_of_agents();
+
+        for agent in self.inner_mut() {
+            if target_quota >= vaccination_quota {
+                break;
+            }
+            if agent.age >= CONST_ELDER_THRESHOLD {
+                agent.vaccination_target = true;
+                target_quota += 1.0 / nagents as f64;   
+            }
+        }
+    }
+
+    pub fn target_age_young_adult(&mut self, vaccination_quota: f64) {
+        let mut target_quota = 0.0;
+        let nagents = self.number_of_agents();
+
+        for agent in self.inner_mut() {
+            if target_quota >= vaccination_quota {
+                break;
+            }
+            if agent.age >= CONST_UNDERAGE_THRESHOLD && agent.age < CONST_MIDDLEAGE_THRESHOLD {
+                agent.vaccination_target = true;
+                target_quota += 1.0 / nagents as f64;   
+            }
+        }
+    }
+
+    pub fn target_age_young_to_elder(&mut self, vaccination_quota: f64) {
+        let mut target_quota = 0.0;
+        let nagents = self.number_of_agents();
+
+        let mut agents: Vec<_> = self.inner().iter() // Use .iter() to get an iterator over the agents
+        .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
+        .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
+        
+        // Now sort this vector of references by age in descending order
+        agents.sort_by(|a, b| a.age.cmp(&b.age));
+        
+        // Map the sorted agent references to their IDs and collect into a vector
+        let young_to_elder: Vec<usize> = agents.iter().map(|agent| agent.id).collect();
+
+        for id in young_to_elder {
+            if target_quota >= vaccination_quota {
+                break;
+            }
+            if self.inner()[id].age < CONST_UNDERAGE_THRESHOLD {
+                self.inner_mut()[id].vaccination_target = true;
+                target_quota += 1.0 / nagents as f64;   
+            }
+        }
+    }
+
+    pub fn target_automatic(&mut self, vaccination_quota: f64) {
+        let mut target_quota = 0.0;
+        let nagents = self.number_of_agents();
+
+        for agent in self.inner_mut() {
+            if target_quota >= vaccination_quota {
+                break;
+            }
+            agent.vaccination_target = true;
+            target_quota += 1.0 / nagents as f64;
+        }
+    }
+
+    pub fn target_random(&mut self, vaccination_quota: f64) {
+        let mut target_quota = 0.0;
+        let nagents = self.number_of_agents();
+        let mut shuffled_indices: Vec<usize> = (0..nagents).collect();
+        shuffled_indices.shuffle(&mut rand::thread_rng());
+
+        for id in shuffled_indices {
+            if target_quota >= vaccination_quota {
+                break;
+            }
+            self.inner_mut()[id].vaccination_target = true;
+            target_quota += 1.0 / nagents as f64;
+        }
+    }
+    
     pub fn total_active(&self) -> u32 {
         let mut summa = 0;
         for agent in self.inner() {

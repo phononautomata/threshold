@@ -1,7 +1,7 @@
 use clap::Parser;
 use serde_pickle::ser::SerOptions;
 
-use crate::agent::{AgentEnsemble, HesitancyAttributionModel, SeedModel};
+use crate::agent::{AgentEnsemble, HesitancyAttributionModel, SeedModel, VaccinationPolicy};
 use crate::cons::{FILENAME_CONFIG, FILENAME_DATA_AVERAGE_CONTACT, FILENAME_DATA_CONTACT_MATRIX, FILENAME_DATA_POPULATION_AGE, FILENAME_DATA_VACCINATION_ATTITUDE, FOLDER_CONFIG, FOLDER_RESULTS, HEADER_AGENT, HEADER_CLUSTER, HEADER_GLOBAL, HEADER_TIME, PAR_NETWORK_TRIALS};
 use crate::utils::{
     build_normalized_cdf, compute_beta_from_r0, compute_cluster_distribution, compute_cluster_stats, compute_interlayer_probability_matrix, compute_intralayer_average_degree, count_underaged, load_json_config, read_key_and_f64_from_json, read_key_and_matrixf64_from_json, read_key_and_vecf64_from_json, write_file_name, AlgorithmPars, EpidemicPars, Input, OpinionPars, OutputEnsemble, OutputPars, SerializeClusterAssemblyTwoWaves, SerializeGlobalAssemblyTwoWaves, SerializedAgentAssemblyTwoWaves, SerializedTimeSeriesAssemblyTwoWaves, USState, VaccinationPars
@@ -97,6 +97,10 @@ pub struct Args {
     pub usa_id: USState,
     #[clap(long, value_parser, default_value_t = 0.0)]
     pub vaccination_decay: f64,
+    #[clap(long, value_parser, default_value = "top-degree-neighborhood")]
+    pub vaccination_policy: VaccinationPolicy,
+    #[clap(long, value_parser, default_value_t = 1.0)]
+    pub vaccination_quota: f64,
     #[clap(long, value_parser, default_value_t = 0.005)]
     pub vaccination_rate: f64,
     #[clap(long, value_parser, default_value_t = 0.0)]
@@ -378,8 +382,12 @@ pub fn run_exp2_datadriven_thresholds(args: Args) {
 
         if pars.output.unwrap().cluster_raw {
             let output_to_serialize = SerializeClusterAssemblyTwoWaves {
-                cluster_w1: assembled_cluster_output1,
-                cluster_w2: assembled_cluster_output2,
+                attitude_w1: None,
+                attitude_w2: None,
+                cascading_w1: None,
+                cascading_w2: None,
+                opinion_health_w1: Some(assembled_cluster_output1),
+                opinion_health_w2: Some(assembled_cluster_output2),
                 pars: pars_replica,
             };
 
@@ -545,6 +553,8 @@ pub fn run_exp3_multilayer_thresholds(args: Args) {
                 args.underage_correction_flag,
                 Some(args.usa_id), 
                 0.0, 
+                args.vaccination_policy,
+                args.vaccination_quota,
                 args.vaccination_rate,
             );
 
@@ -609,6 +619,11 @@ pub fn run_exp3_multilayer_thresholds(args: Args) {
         let average_degree = agent_ensemble.average_degree();
         let beta = r0 * infection_decay / average_degree;
         pars.epidemic.infection_rate = beta;
+
+        agent_ensemble.set_vaccination_policy_model(
+            pars.vaccination.unwrap().vaccination_policy,
+            pars.vaccination.unwrap().vaccination_quota,
+        );
 
         watts_sir_coupled_model_multilayer(
             &mut pars,

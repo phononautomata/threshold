@@ -59,6 +59,8 @@
         "underage_correction": true,
         "us_state": "california",
         "vaccination_decay": 0.0,
+        "vaccination_policy": "automatic",
+        "vaccination_quota": 1.0,
         "vaccination_rate": 0.0
     }
 }

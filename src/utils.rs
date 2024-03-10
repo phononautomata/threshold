@@ -12,7 +12,7 @@ use strum::Display;
 
 use netrust::network::Network;
 use netrust::utils::{NetworkPars, NetworkModel};
-use crate::agent::{Status, AgentEnsemble, SeedModel, Attitude, HesitancyAttributionModel};
+use crate::agent::{AgentEnsemble, Attitude, HesitancyAttributionModel, SeedModel, Status, VaccinationPolicy};
 use crate::cons::{CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS, FOLDER_RESULTS, HEADER_AGE, HEADER_AGENT, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_CLUSTER, HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_GLOBAL, HEADER_PROJECT, HEADER_REBUILD, HEADER_REBUILD_STATS, HEADER_TIME, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE, PAR_AGE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF};
 
 pub fn build_normalized_cdf(values: &mut [f64]) -> Vec<f64> {
@@ -340,10 +340,9 @@ fn write_algorithm_string(apars: &AlgorithmPars) -> String {
 
 fn write_epidemic_string(epars: &EpidemicPars) -> String {
     format!(
-        "_r0{0}_rer{1}_var{2}",
+        "_r0{0}_rer{1}",
         epars.r0,
         epars.infection_decay, 
-        epars.vaccination_rate,
     )
 }
 
@@ -360,8 +359,9 @@ pub fn write_file_name(
     };
     let opars_chain = write_opinion_string(&pars.opinion.unwrap());
     let epars_chain = write_epidemic_string(&pars.epidemic);
+    let vpars_chain = write_vaccination_string(&pars.vaccination.unwrap());
     let apars_chain = write_algorithm_string(&pars.algorithm.unwrap());
-    head + &exp_id + &npars_chain + &opars_chain + &epars_chain + &apars_chain
+    head + &exp_id + &npars_chain + &opars_chain + &epars_chain + &vpars_chain + &apars_chain
 }
 
 fn write_multilayer_string(npars: &NetworkPars) -> String {    
@@ -400,8 +400,20 @@ fn write_opinion_string(opars: &OpinionPars) -> String {
     )
 }
 
+fn write_vaccination_string(vpars: &VaccinationPars) -> String {
+    format!(
+        "_ath{0}_hem{1}_vpo{2}_vqu{3}_var{4}",
+        vpars.age_threshold,
+        vpars.hesitancy_attribution,
+        vpars.vaccination_policy,
+        vpars.vaccination_quota, 
+        vpars.vaccination_rate,
+    )
+}
+
 #[derive(Serialize)]
 struct AgentOutput {
+    pub activation_potential: Option<usize>,
     pub age: Option<usize>,
     pub attitude: Option<Attitude>,
     pub convinced_when: Option<usize>,
@@ -424,6 +436,7 @@ struct AgentOutput {
 
 impl AgentOutput {
     fn new(
+        activation_potential: Option<usize>,
         age: Option<usize>,
         attitude: Option<Attitude>,
         convinced_when: Option<usize>,
@@ -443,7 +456,8 @@ impl AgentOutput {
         vaccinated_when: Option<usize>,
         zealots: Option<usize>,
     ) -> Self {
-        Self { 
+        Self {
+            activation_potential,
             age,
             attitude,
             convinced_when,
@@ -476,6 +490,7 @@ impl AgentEnsembleOutput {
         let mut agent_ensemble_output = Self { inner: Vec::new() };
         
         for agent in agent_ensemble.inner() {
+            let activation_potential = agent.activation_potential.unwrap_or(INIT_USIZE);
             let age = agent.age;
             let attitude = agent.attitude.unwrap_or(INIT_ATTITUDE);
             let convinced_when = agent.convinced_when.unwrap_or(INIT_USIZE);
@@ -496,6 +511,7 @@ impl AgentEnsembleOutput {
             let zealots = agent.zealots.unwrap_or(INIT_USIZE);
     
             let agent_output = AgentOutput::new(
+                Some(activation_potential),
                 Some(age),
                 Some(attitude),
                 Some(convinced_when),
@@ -547,8 +563,9 @@ impl AlgorithmPars {
 
 #[derive(Serialize)]
 pub struct AssembledAgeOutput {
-    age: Vec<Vec<usize>>,
+    activation_potential: Vec<Vec<Vec<usize>>>,
     active: Vec<Vec<usize>>,
+    age: Vec<Vec<usize>>,
     convinced_when: Vec<Vec<Vec<usize>>>,
     degree: Vec<Vec<Vec<usize>>>,
     infected_when: Vec<Vec<Vec<usize>>>,
@@ -561,6 +578,7 @@ pub struct AssembledAgeOutput {
 
 impl AssembledAgeOutput {
     pub fn new(
+        activation_potential: Vec<Vec<Vec<usize>>>,
         active: Vec<Vec<usize>>,
         age: Vec<Vec<usize>>,
         convinced_when: Vec<Vec<Vec<usize>>>,
@@ -573,8 +591,9 @@ impl AssembledAgeOutput {
         zealots: Vec<Vec<usize>>,
     ) -> Self {
         Self { 
-            age, 
+            activation_potential,
             active, 
+            age,
             convinced_when, 
             degree,
             infected_when, 
@@ -589,6 +608,7 @@ impl AssembledAgeOutput {
 
 #[derive(Serialize)]
 pub struct AssembledAgentOutput {
+    pub activation_potential: Vec<Vec<usize>>,
     pub age: Vec<Vec<usize>>,
     pub attitude: Vec<Vec<Attitude>>,
     pub convinced_when: Vec<Vec<usize>>,
@@ -610,6 +630,7 @@ pub struct AssembledAgentOutput {
 
 impl AssembledAgentOutput {
     pub fn new(
+        activation_potential: Vec<Vec<usize>>,
         age: Vec<Vec<usize>>,
         attitude: Vec<Vec<Attitude>>,
         convinced_when: Vec<Vec<usize>>,
@@ -629,6 +650,7 @@ impl AssembledAgentOutput {
         zealots: Vec<Vec<usize>>,
     ) -> Self {
         Self {
+            activation_potential,
             age,
             attitude,
             convinced_when,
@@ -650,8 +672,54 @@ impl AssembledAgentOutput {
     }
 }
 
+
 #[derive(Serialize)]
-pub struct AssembledClusterOutput {
+pub struct AssembledClusterAttitudeOutput {
+    pub already_cluster: Vec<Vec<usize>>,
+    pub soon_cluster: Vec<Vec<usize>>,
+    pub someone_cluster: Vec<Vec<usize>>,
+    pub majority_cluster: Vec<Vec<usize>>,
+    pub never_cluster: Vec<Vec<usize>>,
+}
+
+impl AssembledClusterAttitudeOutput {
+    pub fn new(
+        already_cluster: Vec<Vec<usize>>, 
+        soon_cluster: Vec<Vec<usize>>,
+        someone_cluster: Vec<Vec<usize>>,
+        majority_cluster: Vec<Vec<usize>>,
+        never_cluster: Vec<Vec<usize>>
+    ) -> Self {
+        Self { 
+            already_cluster, 
+            soon_cluster, 
+            someone_cluster, 
+            majority_cluster, 
+            never_cluster 
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct AssembledClusterCascadingOutput {
+    pub cascading_cluster: Vec<Vec<usize>>,
+    pub nonzealot_cluster: Vec<Vec<usize>>,
+}
+
+impl AssembledClusterCascadingOutput {
+    pub fn new(
+        cascading_cluster: Vec<Vec<usize>>, 
+        nonzealot_cluster: Vec<Vec<usize>>,
+    ) -> Self {
+        Self { 
+            cascading_cluster, 
+            nonzealot_cluster,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct AssembledClusterOpinionHealthOutput {
     pub ai_cluster: Vec<Vec<usize>>,
     pub ar_cluster: Vec<Vec<usize>>,
     pub as_cluster: Vec<Vec<usize>>,
@@ -663,7 +731,7 @@ pub struct AssembledClusterOutput {
     pub ze_cluster: Vec<Vec<usize>>,
 }
 
-impl AssembledClusterOutput {
+impl AssembledClusterOpinionHealthOutput {
     pub fn new(
         ai_cluster: Vec<Vec<usize>>,
         ar_cluster: Vec<Vec<usize>>,
@@ -828,7 +896,52 @@ impl AssembledTimeSeriesOutput {
 }
 
 #[derive(Serialize)]
-pub struct ClusterOutput {
+pub struct ClusterAttitudeOutput {
+    pub already_cluster: Vec<usize>,
+    pub soon_cluster: Vec<usize>,
+    pub someone_cluster: Vec<usize>,
+    pub majority_cluster: Vec<usize>,
+    pub never_cluster: Vec<usize>,
+}
+
+impl ClusterAttitudeOutput {
+    pub fn new(
+        already_cluster: Vec<usize>,
+        soon_cluster: Vec<usize>,
+        someone_cluster: Vec<usize>,
+        majority_cluster: Vec<usize>,
+        never_cluster: Vec<usize>,
+     ) -> Self {
+        Self { 
+            already_cluster, 
+            soon_cluster, 
+            someone_cluster, 
+            majority_cluster, 
+            never_cluster,
+        }
+     }
+}
+
+#[derive(Serialize)]
+pub struct ClusterCascadingOutput {
+    pub cascading_cluster: Vec<usize>,
+    pub nonzealot_cluster: Vec<usize>,
+}
+
+impl ClusterCascadingOutput {
+    pub fn new(
+        cascading_cluster: Vec<usize>,
+        nonzealot_cluster: Vec<usize>,
+    ) -> Self {
+        Self { 
+            cascading_cluster, 
+            nonzealot_cluster,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct ClusterOpinionHealthOutput {
     pub ai_cluster: Vec<usize>,
     pub ar_cluster: Vec<usize>,
     pub as_cluster: Vec<usize>,
@@ -840,7 +953,7 @@ pub struct ClusterOutput {
     pub ze_cluster: Vec<usize>,
 }
 
-impl ClusterOutput {
+impl ClusterOpinionHealthOutput {
     pub fn new(
         ai_cluster: Vec<usize>,
         ar_cluster: Vec<usize>,
@@ -862,6 +975,23 @@ impl ClusterOutput {
             hs_cluster,
             hv_cluster,
             ze_cluster,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct ClusterOutput {
+    pub attitude: Option<ClusterAttitudeOutput>,
+    pub cascading: Option<ClusterCascadingOutput>,
+    pub opinion_health: Option<ClusterOpinionHealthOutput>,
+}
+
+impl ClusterOutput {
+    pub fn new(attitude: Option<ClusterAttitudeOutput>, cascading: Option<ClusterCascadingOutput>, opinion_health: Option<ClusterOpinionHealthOutput>) -> Self {
+        Self { 
+            attitude, 
+            cascading, 
+            opinion_health, 
         }
     }
 }
@@ -1085,7 +1215,8 @@ impl OutputEnsemble {
     ) -> AssembledAgeOutput {
         let nsims = self.number_of_simulations();
         let nagents = input.network.unwrap().size;
-       
+
+        let mut activation_potential = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut active = vec![vec![0; PAR_AGE_GROUPS]; nsims];
         let mut age = vec![vec![0; PAR_AGE_GROUPS]; nsims];
         let mut convinced_when = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
@@ -1105,6 +1236,8 @@ impl OutputEnsemble {
 
                 age[s][a] += 1;
                 degree[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].degree.unwrap());
+                
+                activation_potential[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].activation_potential.unwrap());
 
                 if threshold > 1.0 {
                     zealots[s][a] += 1;
@@ -1139,6 +1272,7 @@ impl OutputEnsemble {
         }
 
         AssembledAgeOutput::new(
+            activation_potential,
             active, 
             age, 
             convinced_when, 
@@ -1161,6 +1295,7 @@ impl OutputEnsemble {
         let mut age = vec![vec![INIT_USIZE; n]; nsims];
         let mut convinced_when = vec![vec![INIT_USIZE; n]; nsims];
         let mut degree = vec![vec![INIT_USIZE; n]; nsims];
+        let mut activation_potential = vec![vec![INIT_USIZE; n]; nsims];
         let mut attitude = vec![vec![Attitude::Never; n]; nsims];
         let mut final_active_susceptible = vec![vec![INIT_USIZE; n]; nsims];
         let mut final_prevalence = vec![vec![INIT_USIZE; n]; nsims];
@@ -1178,6 +1313,7 @@ impl OutputEnsemble {
     
         for s in 0..nsims {
             for i in 0..n {
+                activation_potential[s][i] = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].activation_potential.unwrap();
                 age[s][i] = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].age.unwrap();
                 attitude[s][i] = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].attitude.unwrap();
                 convinced_when[s][i] = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].convinced_when.unwrap();
@@ -1199,6 +1335,7 @@ impl OutputEnsemble {
         }
 
         AssembledAgentOutput::new(
+            activation_potential,
             age,
             attitude,
             convinced_when,
@@ -1219,7 +1356,7 @@ impl OutputEnsemble {
         )
     }
 
-    pub fn assemble_cluster_observables(&mut self) -> AssembledClusterOutput {
+    pub fn assemble_cluster_observables(&mut self) -> AssembledClusterOpinionHealthOutput {
         let nsims = self.number_of_simulations() as usize;
         let mut as_clusters = vec![vec![]; nsims];
         let mut hs_clusters = vec![vec![]; nsims];
@@ -1232,18 +1369,18 @@ impl OutputEnsemble {
         let mut ze_clusters = vec![vec![]; nsims];
 
         for s in 0..nsims {
-            as_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().as_cluster.clone();
-            hs_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().hs_cluster.clone();
-            ai_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().ai_cluster.clone();
-            hi_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().hi_cluster.clone();
-            ar_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().ar_cluster.clone();
-            hr_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().hr_cluster.clone();
-            av_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().av_cluster.clone();
-            hv_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().hv_cluster.clone();
-            ze_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().ze_cluster.clone();
+            as_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().opinion_health.as_ref().unwrap().as_cluster.clone();
+            hs_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().opinion_health.as_ref().unwrap().hs_cluster.clone();
+            ai_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().opinion_health.as_ref().unwrap().ai_cluster.clone();
+            hi_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().opinion_health.as_ref().unwrap().hi_cluster.clone();
+            ar_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().opinion_health.as_ref().unwrap().ar_cluster.clone();
+            hr_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().opinion_health.as_ref().unwrap().hr_cluster.clone();
+            av_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().opinion_health.as_ref().unwrap().av_cluster.clone();
+            hv_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().opinion_health.as_ref().unwrap().hv_cluster.clone();
+            ze_clusters[s] = self.inner()[s].cluster.as_ref().unwrap().opinion_health.as_ref().unwrap().ze_cluster.clone();
         }
 
-        AssembledClusterOutput::new(
+        AssembledClusterOpinionHealthOutput::new(
             ai_clusters, 
             ar_clusters, 
             as_clusters, 
@@ -1845,14 +1982,20 @@ pub struct SerializedAgentAssemblyTwoWaves {
 
 #[derive(Serialize)]
 pub struct SerializedClusterAssembly {
-    pub cluster: AssembledClusterOutput,
+    pub attitude: Option<AssembledClusterAttitudeOutput>,
+    pub cascading: Option<AssembledClusterCascadingOutput>,
+    pub opinion_health: Option<AssembledClusterOpinionHealthOutput>,
     pub pars: Input,
 }
 
 #[derive(Serialize)]
 pub struct SerializeClusterAssemblyTwoWaves {
-    pub cluster_w1: AssembledClusterOutput,
-    pub cluster_w2: AssembledClusterOutput,
+    pub attitude_w1: Option<AssembledClusterAttitudeOutput>,
+    pub attitude_w2: Option<AssembledClusterAttitudeOutput>,
+    pub cascading_w1: Option<AssembledClusterCascadingOutput>,
+    pub cascading_w2: Option<AssembledClusterCascadingOutput>,
+    pub opinion_health_w1: Option<AssembledClusterOpinionHealthOutput>,
+    pub opinion_health_w2: Option<AssembledClusterOpinionHealthOutput>,
     pub pars: Input,
 }
 
@@ -2157,6 +2300,8 @@ pub struct VaccinationPars {
     pub underage_correction: bool,
     pub us_state: Option<USState>,
     pub vaccination_decay: f64,
+    pub vaccination_policy: VaccinationPolicy,
+    pub vaccination_quota: f64,
     pub vaccination_rate: f64,
 } 
 
@@ -2172,6 +2317,8 @@ impl VaccinationPars {
         underage_correction: bool,
         us_state: Option<USState>,
         vaccination_decay: f64,
+        vaccination_policy: VaccinationPolicy,
+        vaccination_quota: f64,
         vaccination_rate: f64,
     ) -> Self {
         Self {
@@ -2185,6 +2332,8 @@ impl VaccinationPars {
             underage_correction,
             us_state,
             vaccination_decay,
+            vaccination_policy,
+            vaccination_quota,
             vaccination_rate,
         }
     }
@@ -2527,16 +2676,16 @@ pub fn compute_agent_stats(
 }
 
 pub fn compute_cluster_distribution(
-    assembled_cluster_output: &AssembledClusterOutput,
+    assembled_cluster_opinion_health_output: &AssembledClusterOpinionHealthOutput,
 ) -> ClusterDistributionPacker {
-    let ai_cluster_s = &assembled_cluster_output.ai_cluster;
-    let ar_cluster_s = &assembled_cluster_output.ar_cluster;
-    let as_cluster_s = &assembled_cluster_output.as_cluster;
-    let av_cluster_s = &assembled_cluster_output.av_cluster;
-    let hi_cluster_s = &assembled_cluster_output.hi_cluster;
-    let hr_cluster_s = &assembled_cluster_output.hr_cluster;
-    let hs_cluster_s = &assembled_cluster_output.hs_cluster;
-    let hv_cluster_s = &assembled_cluster_output.hv_cluster;
+    let ai_cluster_s = &assembled_cluster_opinion_health_output.ai_cluster;
+    let ar_cluster_s = &assembled_cluster_opinion_health_output.ar_cluster;
+    let as_cluster_s = &assembled_cluster_opinion_health_output.as_cluster;
+    let av_cluster_s = &assembled_cluster_opinion_health_output.av_cluster;
+    let hi_cluster_s = &assembled_cluster_opinion_health_output.hi_cluster;
+    let hr_cluster_s = &assembled_cluster_opinion_health_output.hr_cluster;
+    let hs_cluster_s = &assembled_cluster_opinion_health_output.hs_cluster;
+    let hv_cluster_s = &assembled_cluster_opinion_health_output.hv_cluster;
 
     let ai_cluster_dist = compute_cluster_sim_distribution(ai_cluster_s);
     let ar_cluster_dist = compute_cluster_sim_distribution(ar_cluster_s);
@@ -2574,16 +2723,16 @@ fn compute_cluster_sim_distribution(
 }
 
 pub fn compute_cluster_stats(
-    assembled_cluster_output: &AssembledClusterOutput,
+    assembled_cluster_opinion_health_output: &AssembledClusterOpinionHealthOutput,
 ) -> ClusterStatPacker {
-    let ai_cluster_s = &assembled_cluster_output.ai_cluster;
-    let ar_cluster_s = &assembled_cluster_output.ar_cluster;
-    let as_cluster_s = &assembled_cluster_output.as_cluster;
-    let av_cluster_s = &assembled_cluster_output.av_cluster;
-    let hi_cluster_s = &assembled_cluster_output.hi_cluster;
-    let hr_cluster_s = &assembled_cluster_output.hr_cluster;
-    let hs_cluster_s = &assembled_cluster_output.hs_cluster;
-    let hv_cluster_s = &assembled_cluster_output.hv_cluster;
+    let ai_cluster_s = &assembled_cluster_opinion_health_output.ai_cluster;
+    let ar_cluster_s = &assembled_cluster_opinion_health_output.ar_cluster;
+    let as_cluster_s = &assembled_cluster_opinion_health_output.as_cluster;
+    let av_cluster_s = &assembled_cluster_opinion_health_output.av_cluster;
+    let hi_cluster_s = &assembled_cluster_opinion_health_output.hi_cluster;
+    let hr_cluster_s = &assembled_cluster_opinion_health_output.hr_cluster;
+    let hs_cluster_s = &assembled_cluster_opinion_health_output.hs_cluster;
+    let hv_cluster_s = &assembled_cluster_opinion_health_output.hv_cluster;
 
     let ai_stats = calculate_cluster_sim_stats(ai_cluster_s);
     let ar_stats = calculate_cluster_sim_stats(ar_cluster_s);

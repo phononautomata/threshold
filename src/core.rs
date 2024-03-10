@@ -2,19 +2,15 @@ use netrust::network::Network;
 use rand::prelude::*;
 
 use crate::{
-    agent::{AgentEnsemble, Status}, 
-    utils::{
-        Input, OutputResults, GlobalOutput, TimeOutput, TimeUnitPop, 
-        OutputEnsemble, remove_duplicates, AgentEnsembleOutput, 
-        ClusterOutput, sir_prevalence, compute_beta_from_r0,
-    }, cons::{PAR_TIME_STEP, FLAG_VERBOSE, PAR_EPIDEMIC_DIEOUT}, 
+    agent::{AgentEnsemble, Attitude, Status}, cons::{FLAG_VERBOSE, PAR_EPIDEMIC_DIEOUT, PAR_TIME_STEP}, utils::{
+        compute_beta_from_r0, remove_duplicates, sir_prevalence, AgentEnsembleOutput, ClusterAttitudeOutput, ClusterCascadingOutput, ClusterOpinionHealthOutput, ClusterOutput, GlobalOutput, Input, OutputEnsemble, OutputResults, TimeOutput, TimeUnitPop
+    } 
 };
 
 fn dynamical_loop(
     agent_ensemble: &mut AgentEnsemble, 
     pars: &Input,
 ) -> OutputResults {
-        // Gather individuals by opinion-health status
         let mut hs_list = agent_ensemble.gather_hesitant_susceptible();
         let mut as_list = agent_ensemble.gather_active_susceptible();
         let mut hi_list = agent_ensemble.gather_hesitant_infected();
@@ -24,27 +20,21 @@ fn dynamical_loop(
         let mut av_list = agent_ensemble.gather_active_vaccinated();
         let hv_list = agent_ensemble.gather_hesitant_vaccinated();
         
-        // Get initial susceptible density for the analytical comparison
         let sus_den_0 = (hs_list.len() + as_list.len()) as f64 / agent_ensemble.number_of_agents() as f64;
 
-        // Initialize status-based population time series
         let mut pop_tseries = TimeOutput::new();
-    
-        // Initialize peak variables
+
         let mut time_to_peak = 0;
         let mut peak_incidence = 0;
         let mut vaccinated_at_peak = 0;
         let mut convinced_at_peak = 0;
-        
-        // Initialize loop conditions
+
         let t_max = pars.algorithm.unwrap().t_max;
         let mut t = 0;
         let delta_t = PAR_TIME_STEP;
         let mut total_infected = 1;
 
-        // Run dynamical loop
         while (t < t_max) && total_infected > PAR_EPIDEMIC_DIEOUT {
-            // Opinion step for all types of hesitant agents
             let mut new_hs_list = watts_threshold_step_subensemble(&hs_list, agent_ensemble, &mut as_list, t);
             let new_hi_list = watts_threshold_step_subensemble(&hi_list, agent_ensemble, &mut ai_list, t);
             let mut new_hr_list = watts_threshold_step_subensemble(&hr_list, agent_ensemble, &mut ar_list, t);
@@ -52,7 +42,6 @@ fn dynamical_loop(
             // Vaccination step for all active susceptible agents //TODO: INTRODUCE VACCINATION MODEL SELECTION
             let mut new_as_list = vaccination_step_subensemble(&as_list, agent_ensemble, &mut av_list, pars.epidemic.vaccination_rate, t);
 
-            // Infection & removal steps for all infected agents
             let (new_hi_list, ai_list_rep) = infection_and_removal_step_subensemble(
                 &new_hi_list, 
                 &ai_list, 
@@ -73,8 +62,7 @@ fn dynamical_loop(
                 pars.epidemic.infection_decay,
                 t,
             );
-            
-            // Update lists
+
             new_ai_list.extend(ai_list_rep);
             ai_list = remove_duplicates(new_ai_list);
             ai_list = agent_ensemble.update_list(&mut ai_list, Status::ActInf);
@@ -82,8 +70,7 @@ fn dynamical_loop(
             hs_list = agent_ensemble.update_list(&mut new_hs_list, Status::HesSus);
             as_list = agent_ensemble.update_list(&mut new_as_list, Status::ActSus);
             hr_list = new_hr_list;
-            
-            // Update population time series
+
             let pop_t = TimeUnitPop::new(
                 ai_list.len(), 
                 ar_list.len(), 
@@ -95,8 +82,7 @@ fn dynamical_loop(
                 hv_list.len(),
             );
             pop_tseries.update_time_series(t, &pop_t);
-            
-            // Check exit condition
+    
             let total_hi = hi_list.len();
             let total_ai = ai_list.len();
             if total_hi + total_ai >= total_infected {
@@ -107,7 +93,6 @@ fn dynamical_loop(
             }
             total_infected = total_hi + total_ai;
     
-            // Update time step
             t += delta_t;  
             if FLAG_VERBOSE {
                 println!("t={t}, inf={total_infected}");
@@ -116,7 +101,6 @@ fn dynamical_loop(
     
         let end_time = t;
     
-        // Complete time series
         let pop_t = TimeUnitPop::new(
             ai_list.len(), 
             ar_list.len(),
@@ -133,7 +117,6 @@ fn dynamical_loop(
             t += delta_t;
         }
     
-        // Measure global results
         let prevalence = ar_list.len() + hr_list.len();
         let vaccinated = av_list.len();
         let active = as_list.len() + ar_list.len() + av_list.len();
@@ -144,7 +127,6 @@ fn dynamical_loop(
         let prev_ratio = prevalence as f64 / pars.network.unwrap().size as f64;
         println!("Analytical homogeneous prevalence={r_inf} vs {prev_ratio}");
     
-        // Collect global results
         let global_output = GlobalOutput {
             active,
             convinced_at_peak,
@@ -156,7 +138,6 @@ fn dynamical_loop(
             vaccinated_at_peak, 
         };
 
-        // Prepare output struct
         let mut output = OutputResults {
             agent_ensemble: None,
             cluster: None,
@@ -165,15 +146,12 @@ fn dynamical_loop(
             time: None,
         };
         
-        // Collect cluster results
         if pars.output.unwrap().cluster {
-            let cluster_output = measure_clusters(&agent_ensemble);
-            output.cluster = Some(cluster_output);
+            let cluster_output = measure_opinion_health_clusters(&agent_ensemble);
+            output.cluster.as_mut().unwrap().opinion_health = Some(cluster_output);
         }
-        
-        // Collect agent results
+
         if pars.output.unwrap().agent {
-            // Measure final agent/local properties if enabled
             if pars.output.unwrap().agent {
                 for agent_id in 0..agent_ensemble.number_of_agents() {
                     measure_neighborhood(agent_id, agent_ensemble, t);
@@ -182,145 +160,11 @@ fn dynamical_loop(
             let agent_ensemble_output = AgentEnsembleOutput::new(agent_ensemble);
             output.agent_ensemble = Some(agent_ensemble_output);
         }
-        // Collect time series results
+
         if pars.output.unwrap().time {
             output.time = Some(pop_tseries);
         }
         output
-}
-
-pub fn dynamical_loop_multilayer(
-    agent_ensemble: &mut AgentEnsemble, 
-    pars: &Input,
-) -> OutputResults {
-    // Gather agents by opinion-health status
-    let mut hs_list = agent_ensemble.gather_hesitant_susceptible();
-    let mut as_list = agent_ensemble.gather_active_susceptible();
-    let mut hi_list = agent_ensemble.gather_hesitant_infected();
-    let mut ai_list = agent_ensemble.gather_active_infected();
-    let mut hr_list = agent_ensemble.gather_hesitant_removed();
-    let mut ar_list = agent_ensemble.gather_active_removed();
-    let mut av_list = agent_ensemble.gather_active_vaccinated();
-    let hv_list = agent_ensemble.gather_hesitant_vaccinated();
-
-    // Get initial susceptible density for the analytical comparison
-    let sus_den_0 = (hs_list.len() + as_list.len()) as f64 / agent_ensemble.number_of_agents() as f64;
-
-    // Initialize peak variables
-    let mut time_to_peak = 0;
-    let mut peak_incidence = 0;
-    let mut vaccinated_at_peak = 0;
-    let mut convinced_at_peak = 0;
-    
-    // Initialize loop conditions
-    let t_max = pars.algorithm.unwrap().t_max;
-    let mut t = 0;
-    let delta_t = 1;
-    let mut total_infected = 1;
-
-    // Run dynamical loop
-    while (t < t_max) && total_infected > 0 {
-        // Opinion step for all types of hesitant agents
-        let mut new_hs_list = watts_threshold_step_subensemble(&hs_list, agent_ensemble, &mut as_list, t);
-        let new_hi_list = watts_threshold_step_subensemble(&hi_list, agent_ensemble, &mut ai_list, t);
-        let mut new_hr_list = watts_threshold_step_subensemble(&hr_list, agent_ensemble, &mut ar_list, t);
-        
-        // Vaccination step for all active susceptible agents
-        let mut new_as_list = vaccination_step_subensemble(&as_list, agent_ensemble, &mut av_list, pars.epidemic.vaccination_rate, t);
-        
-        // Infection & removal steps for all infected agents
-        let (new_hi_list, ai_list_rep) = infection_and_removal_step_subensemble(
-            &new_hi_list, 
-            &ai_list, 
-            agent_ensemble, 
-            &mut new_hr_list, 
-            Status::HesInf, 
-            pars.epidemic.infection_rate,
-            pars.epidemic.infection_decay,
-            t,
-        );
-        let (mut new_ai_list, new_hi_list) = infection_and_removal_step_subensemble(
-            &ai_list, 
-            &new_hi_list, 
-            agent_ensemble, 
-            &mut ar_list, 
-            Status::ActInf, 
-            pars.epidemic.infection_rate,
-            pars.epidemic.infection_decay,
-            t,
-        );
-        
-        // Update lists
-        new_ai_list.extend(ai_list_rep);
-        ai_list = remove_duplicates(new_ai_list);
-        ai_list = agent_ensemble.update_list(&mut ai_list, Status::ActInf);
-        hi_list = remove_duplicates(new_hi_list);
-        hs_list = agent_ensemble.update_list(&mut new_hs_list, Status::HesSus);
-        as_list = agent_ensemble.update_list(&mut new_as_list, Status::ActSus);
-        hr_list = new_hr_list;
-
-        // Check exit condition
-        let total_hi = hi_list.len();
-        let total_ai = ai_list.len();
-        if total_hi + total_ai >= total_infected {
-            peak_incidence = total_hi + total_ai;
-            time_to_peak = t;
-            vaccinated_at_peak = av_list.len() + hv_list.len();
-            convinced_at_peak = as_list.len() + ai_list.len() + ar_list.len() + av_list.len();
-        }
-        total_infected = total_hi + total_ai;
-
-        // Update time step
-        t += delta_t;  
-        //println!("t={t}, inf={total_infected}");  
-    }
-
-    let end_time = t;
-
-    // Measure global results
-    let prevalence = ar_list.len() + hr_list.len();
-    let vaccinated = av_list.len();
-    let active = as_list.len() + ar_list.len() + av_list.len();
-
-    println!("Time={end_time}, total infected={total_infected}");
-    println!("Prevalence={prevalence}, vaccinated={vaccinated}, active={active}");
-    let r_inf = sir_prevalence(pars.epidemic.r0, sus_den_0);
-    let prev_ratio = prevalence as f64 / agent_ensemble.number_of_agents() as f64;
-    println!("Analytical homogeneous prevalence={r_inf} vs {prev_ratio}");
-
-    // Collect global results
-    let global_output = GlobalOutput { 
-        convinced_at_peak,
-        prevalence, 
-        vaccinated, 
-        vaccinated_at_peak,
-        active, 
-        peak_incidence, 
-        time_to_peak, 
-        time_to_end: end_time, 
-    };
-    // Prepare output struct
-    let mut output = OutputResults {
-        agent_ensemble: None,
-        cluster: None,
-        global: global_output,
-        rebuild: None,
-        time: None,
-    };
-
-    // Collect agent results
-    if pars.output.unwrap().agent {
-        // Measure final agent/local properties if enabled
-        if pars.output.unwrap().agent {
-            for agent_id in 0..agent_ensemble.number_of_agents() {
-                measure_neighborhood(agent_id, agent_ensemble, t);
-            }
-        }
-        let agent_ensemble_output = AgentEnsembleOutput::new(agent_ensemble);
-        output.agent_ensemble = Some(agent_ensemble_output);
-    }
-
-    output
 }
 
 fn infection_and_removal_step_subensemble(
@@ -408,7 +252,100 @@ fn infection_step_agent(
         (hes_inf_a, act_inf_a)
     }
 
-fn measure_clusters(agent_ensemble: &AgentEnsemble) -> ClusterOutput {
+#[allow(dead_code)]
+fn measure_attitude_clusters(agent_ensemble: &AgentEnsemble) -> ClusterAttitudeOutput {
+    let mut already_clusters = Vec::new();
+    let mut soon_clusters = Vec::new();
+    let mut someone_clusters = Vec::new();
+    let mut majority_clusters = Vec::new();
+    let mut never_clusters = Vec::new();
+ 
+    // Initialize visited array and stack
+    let nagents = agent_ensemble.number_of_agents();
+    let mut clustered = vec![false; nagents];
+    let mut stack = Vec::new();
+
+    // DFS algorithm for building cluster distribution
+    for a in 0..nagents {
+        if !clustered[a] {
+            // Initialize new cluster
+            let mut cluster = Vec::new();
+            stack.push(a);
+            clustered[a] = true;
+
+            // Get attitude & threshold for departing node
+            let a_attitude = agent_ensemble.inner()[a].attitude;
+            let a_threshold = agent_ensemble.inner()[a].threshold;
+
+            // Check for zealots
+            if a_threshold > 1.0 {
+                // DFS
+                while let Some(u) = stack.pop() {
+                    // Add u to the current cluster
+                    cluster.push(u);
+                    clustered[u] = true;
+
+                    // Add unvisited neighbors with matching status or threshold to stack
+                    for v in agent_ensemble.inner()[u].neighbors.clone() {
+                        if !clustered[v] {
+                            let v_threshold = agent_ensemble.inner()[v].threshold;
+                            if v_threshold > 1.0 && a_threshold > 1.0 {
+                                stack.push(v);
+                                clustered[v] = true;
+                            }
+                        }
+                    }
+                }
+
+                // Add cluster to corresponding vector
+                never_clusters.push(cluster.len());  
+
+            } else {
+                // DFS
+                while let Some(u) = stack.pop() {
+                    // Add u to the current cluster
+                    cluster.push(u);
+                    clustered[u] = true;
+
+                    // Add unvisited neighbors with matching status or threshold to stack
+                    for v in agent_ensemble.inner()[u].neighbors.clone() {
+                        if !clustered[v] {
+                            let v_status = agent_ensemble.inner()[v].attitude;
+                            let v_threshold = agent_ensemble.inner()[v].threshold;
+                            if v_status == a_attitude && (v_threshold < 1.0) {
+                                stack.push(v);
+                                clustered[v] = true;
+                            }
+                        }
+                    }
+                }
+                // Add cluster to corresponding vector
+                match a_attitude.unwrap() {
+                    Attitude::Vaccinated => already_clusters.push(cluster.len()),
+                    Attitude::Soon => soon_clusters.push(cluster.len()),
+                    Attitude::Someone => someone_clusters.push(cluster.len()),
+                    Attitude::Most => majority_clusters.push(cluster.len()),
+                    Attitude::Never => never_clusters.push(cluster.len()),
+                }
+            }
+        }
+    }
+
+    ClusterAttitudeOutput::new(
+        already_clusters, 
+        soon_clusters, 
+        someone_clusters, 
+        majority_clusters, 
+        never_clusters,
+    )
+}
+
+#[allow(dead_code)]
+fn measure_cascading_clusters(_agent_ensemble: &mut AgentEnsemble) -> ClusterCascadingOutput {
+    todo!()
+}
+
+fn measure_opinion_health_clusters(agent_ensemble: &AgentEnsemble) -> ClusterOpinionHealthOutput {
     let mut as_clusters = Vec::new();
     let mut hs_clusters = Vec::new();
     let mut ai_clusters = Vec::new();
@@ -492,8 +429,8 @@ fn measure_clusters(agent_ensemble: &AgentEnsemble) -> ClusterOutput {
             }
         }
     }
-    
-    ClusterOutput::new(
+
+    ClusterOpinionHealthOutput::new(
             ai_clusters,
             as_clusters, 
             ar_clusters, 
@@ -568,14 +505,21 @@ fn vaccination_step_subensemble(
     let mut new_as_list = Vec::new();
     for a in as_list.iter() {
         let agent_id = *a;
-        let change = vaccination_step_agent(vaccination_rate);
-        if change {
-            agent_ensemble.inner_mut()[agent_id].status = Status::ActVac;
-            agent_ensemble.inner_mut()[agent_id].vaccinated_when = Some(t);
-            av_list.push(agent_id);
-        } else {
-            new_as_list.push(agent_id);
-        }
+        let vaccination_target = agent_ensemble.inner()[agent_id].vaccination_target;
+        match vaccination_target {
+            true => {
+                if vaccination_step_agent(vaccination_rate) {
+                    agent_ensemble.inner_mut()[agent_id].status = Status::ActVac;
+                    agent_ensemble.inner_mut()[agent_id].vaccinated_when = Some(t);
+                    av_list.push(agent_id);
+                } else {
+                    new_as_list.push(agent_id);
+                }
+            },
+            false => {
+                new_as_list.push(agent_id);
+            },
+        };
     }
     new_as_list
 }
@@ -651,7 +595,7 @@ pub fn watts_sir_coupled_model_datadriven_thresholds(
             }
         }
         // Measure clusters if enabled
-        let mut cluster_output = ClusterOutput {
+        let mut cluster_output = ClusterOpinionHealthOutput {
             as_cluster: Vec::new(),
             hs_cluster: Vec::new(),
             ai_cluster: Vec::new(),
@@ -663,7 +607,7 @@ pub fn watts_sir_coupled_model_datadriven_thresholds(
             ze_cluster: Vec::new(),
         };
         if pars.output.unwrap().cluster {
-            cluster_output = measure_clusters(&agent_ensemble);
+            cluster_output = measure_opinion_health_clusters(&agent_ensemble);
         }
 
         // Coupled dynamics
@@ -671,7 +615,7 @@ pub fn watts_sir_coupled_model_datadriven_thresholds(
 
         // Collect clusters into output if enabled
         if pars.output.unwrap().cluster {
-            output1.cluster = Some(cluster_output);
+            output1.cluster.as_mut().unwrap().opinion_health = Some(cluster_output);
         }
 
         // Add outbreak output to ensemble
@@ -689,7 +633,7 @@ pub fn watts_sir_coupled_model_datadriven_thresholds(
             agent_ensemble.introduce_infections_dd(pars.epidemic.seed_model, pars.epidemic.nseeds);
 
             // Measure clusters if enabled
-            let mut cluster_output = ClusterOutput {
+            let mut cluster_output = ClusterOpinionHealthOutput {
                 as_cluster: Vec::new(),
                 hs_cluster: Vec::new(),
                 ai_cluster: Vec::new(),
@@ -701,7 +645,7 @@ pub fn watts_sir_coupled_model_datadriven_thresholds(
                 ze_cluster: Vec::new(),
             };
             if pars.output.unwrap().cluster {
-                cluster_output = measure_clusters(&agent_ensemble);
+                cluster_output = measure_opinion_health_clusters(&agent_ensemble);
             }
 
             // Coupled dynamics
@@ -709,7 +653,7 @@ pub fn watts_sir_coupled_model_datadriven_thresholds(
 
             // Collect clusters into output if enabled
             if pars.output.unwrap().cluster {
-                output2.cluster = Some(cluster_output);
+                output2.cluster.as_mut().unwrap().opinion_health = Some(cluster_output);
             }
 
             // Add outbreak output to ensemble
@@ -736,25 +680,18 @@ pub fn watts_sir_coupled_model_multilayer(
             }
         }
 
-        let mut cluster_output = ClusterOutput {
-            as_cluster: Vec::new(),
-            hs_cluster: Vec::new(),
-            ai_cluster: Vec::new(),
-            hi_cluster: Vec::new(),
-            ar_cluster: Vec::new(),
-            hr_cluster: Vec::new(),
-            av_cluster: Vec::new(),
-            hv_cluster: Vec::new(),
-            ze_cluster: Vec::new(),
+        let cluster_output = if pars.output.unwrap().cluster {
+            let attitude_cluster = measure_attitude_clusters(agent_ensemble);
+            let cascading_cluster = measure_cascading_clusters(agent_ensemble);
+            Some(ClusterOutput::new(Some(attitude_cluster), Some(cascading_cluster), None))
+        } else {
+            None
         };
-        if pars.output.unwrap().cluster {
-            cluster_output = measure_clusters(&agent_ensemble);
-        }
     
         let mut output = dynamical_loop(agent_ensemble, pars);
 
         if pars.output.unwrap().cluster {
-            output.cluster = Some(cluster_output);
+            output.cluster = cluster_output;
         }
 
         output_ensemble.add_outbreak(output, pars.network.unwrap().size, pars.epidemic.r0);

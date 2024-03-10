@@ -33,6 +33,7 @@ pub const HEADER_AGE: &str = "age_";
 pub const HEADER_AGENT: &str = "agent_";
 pub const HEADER_AGENT_DISTRIBUTION: &str = "ad_";
 pub const HEADER_AGENT_STATS: &str = "asp_";
+pub const HEADER_ATTITUDE: &str = "att_";
 pub const HEADER_CLUSTER: &str = "cluster_";
 pub const HEADER_CLUSTER_DISTRIBUTION: &str = "cd_";
 pub const HEADER_CLUSTER_STATS: &str = "csp_";
@@ -49,6 +50,7 @@ pub const INIT_STATUS: Status = Status::HesSus;
 pub const INIT_USIZE: usize = std::usize::MAX;
 
 pub const PAR_AGE_GROUPS: usize = 85;
+pub const PAR_ATTITUDE_GROUPS: usize = 5;
 pub const PAR_EPIDEMIC_DIEOUT: usize = 0;
 pub const PAR_NBINS: usize = 30;
 pub const PAR_NETWORK_TRIALS: usize = 100;

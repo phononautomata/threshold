@@ -195,7 +195,10 @@ impl Agent {
         }
     }
 
-    fn measure_activation_potential(&mut self, agent_ensemble: &mut AgentEnsemble) {
+    fn measure_activation_potential(
+        &mut self, 
+        agent_ensemble: &mut AgentEnsemble,
+    ) {
         let neighbors = self.neighbors.clone();
         let threshold = self.threshold;
         let mut cascading_count = 0;
@@ -215,7 +218,10 @@ impl Agent {
         }
     }
 
-    fn measure_average_neighbor_threshold(&mut self, agent_ensemble: &mut AgentEnsemble) -> f64 {
+    fn measure_average_neighbor_threshold(
+        &mut self, 
+        agent_ensemble: &mut AgentEnsemble,
+    ) -> f64 {
         let neighbors = self.neighbors.clone();
         let mut cumulative_neighbor_threshold = 0.0;
         let degree = self.degree;
@@ -229,7 +235,10 @@ impl Agent {
         average_neighbor_threshold
     }
 
-    pub fn measure_cascading_threshold(&mut self, agent_ensemble: &mut AgentEnsemble) -> usize {
+    pub fn measure_cascading_threshold(
+        &mut self, 
+        agent_ensemble: &mut AgentEnsemble,
+    ) -> usize {
         let neighbors = self.neighbors.clone();
         let threshold = self.threshold;
         let mut cumulative_neighbor_threshold = 0.0;
@@ -358,7 +367,11 @@ impl Agent {
         self.degree = sample_from_cdf(cdf)
     }
 
-    fn sample_degree_from_negative_binomial(&mut self, mean_value: f64, _standard_deviation: f64) {
+    fn sample_degree_from_negative_binomial(
+        &mut self, 
+        mean_value: f64, 
+        _standard_deviation: f64,
+    ) {
         let variance = mean_value + 13.0;
         let r = mean_value.powi(2) / (variance - mean_value);
         let p = r / (r + mean_value);
@@ -398,7 +411,10 @@ impl AgentEnsemble {
         self.inner
     }
 
-    pub fn arrange_nodes_to_age_layers(&self, age_groups: usize) -> Vec<Vec<usize>> {
+    pub fn arrange_nodes_to_age_layers(
+        &self, 
+        age_groups: usize,
+    ) -> Vec<Vec<usize>> {
         let mut nodes_to_layers = vec![Vec::new(); age_groups];
 
         for (_, agent) in self.inner().iter().enumerate() {
@@ -423,6 +439,10 @@ impl AgentEnsemble {
 
     fn build_status_array(&self) -> Vec<Status> {
         self.inner().iter().map(|agent| agent.status).collect()
+    }
+
+    pub fn cascading_potential(&self) -> Vec<usize> {
+        todo!()
     }
 
     pub fn clear_epidemic_consequences(&mut self) {
@@ -454,7 +474,10 @@ impl AgentEnsemble {
         agent_subensemble
     }
 
-    pub fn collect_intralayer_stubs(&self, age_groups: usize) -> Vec<Vec<usize>> {
+    pub fn collect_intralayer_stubs(
+        &self, 
+        age_groups: usize,
+    ) -> Vec<Vec<usize>> {
         let mut intralayer_stubs = vec![Vec::new(); age_groups];
 
         for (_, agent) in self.inner().iter().enumerate()  {
@@ -1610,7 +1633,10 @@ impl AgentEnsemble {
         }
     }
 
-    pub fn sample_degree_conditioned_to_age(&mut self, intralayer_average_degree: &Vec<f64>) {
+    pub fn sample_degree_conditioned_to_age(
+        &mut self, 
+        intralayer_average_degree: &Vec<f64>,
+    ) {
         for agent in self.inner_mut() {
             let age = agent.age;
             let average_degree = intralayer_average_degree[age];
@@ -1625,7 +1651,10 @@ impl AgentEnsemble {
         }
     }
 
-    pub fn set_vaccination_policy_model(&mut self, vaccination_policy: VaccinationPolicy, vaccination_quota: f64) {
+    pub fn set_vaccination_policy_model(
+        &mut self, vaccination_policy: VaccinationPolicy, 
+        vaccination_quota: f64,
+    ) {
         match vaccination_policy {
             VaccinationPolicy::AgeAdult => {
                 todo!()

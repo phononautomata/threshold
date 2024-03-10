@@ -31,6 +31,8 @@ pub struct Args {
     pub agent_flag: bool,
     #[clap(long, value_parser, default_value_t = false)]
     pub agent_raw_flag: bool,
+    #[clap(long, value_parser, default_value_t = true)]
+    pub attitude_flag: bool,
     #[clap(long, value_parser, default_value_t = 10)]
     pub average_degree: usize,
     #[clap(long, value_parser, default_value_t = false)]
@@ -161,6 +163,7 @@ pub fn run_exp1_homogeneous(args: Args) {
                 args.age_flag,
                 args.agent_flag,
                 args.agent_raw_flag,
+                args.attitude_flag,
                 args.cluster_flag,
                 args.cluster_raw_flag,
                 args.degree_flag,
@@ -268,6 +271,7 @@ pub fn run_exp2_datadriven_thresholds(args: Args) {
                 args.age_flag,
                 args.agent_flag,
                 args.agent_raw_flag,
+                args.attitude_flag,
                 args.cluster_flag,
                 args.cluster_raw_flag,
                 args.degree_flag,
@@ -532,6 +536,7 @@ pub fn run_exp3_multilayer_thresholds(args: Args) {
                 args.age_flag,
                 args.agent_flag,
                 args.agent_raw_flag,
+                args.attitude_flag,
                 args.cluster_flag,
                 args.cluster_raw_flag,
                 args.degree_flag,

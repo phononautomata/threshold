@@ -13,7 +13,7 @@ use strum::Display;
 use netrust::network::Network;
 use netrust::utils::{NetworkPars, NetworkModel};
 use crate::agent::{AgentEnsemble, Attitude, HesitancyAttributionModel, SeedModel, Status, VaccinationPolicy};
-use crate::cons::{CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS, FOLDER_RESULTS, HEADER_AGE, HEADER_AGENT, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_CLUSTER, HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_GLOBAL, HEADER_PROJECT, HEADER_REBUILD, HEADER_REBUILD_STATS, HEADER_TIME, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE, PAR_AGE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF};
+use crate::cons::{CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS, FOLDER_RESULTS, HEADER_AGE, HEADER_AGENT, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_ATTITUDE, HEADER_CLUSTER, HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_GLOBAL, HEADER_PROJECT, HEADER_REBUILD, HEADER_REBUILD_STATS, HEADER_TIME, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE, PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF};
 
 pub fn build_normalized_cdf(values: &mut [f64]) -> Vec<f64> {
     let sum: f64 = values.iter().sum();
@@ -568,12 +568,17 @@ pub struct AssembledAgeOutput {
     age: Vec<Vec<usize>>,
     convinced_when: Vec<Vec<Vec<usize>>>,
     degree: Vec<Vec<Vec<usize>>>,
+    final_active_susceptible: Vec<Vec<Vec<usize>>>,
+    final_prevalence: Vec<Vec<Vec<usize>>>,
+    final_vaccinated: Vec<Vec<Vec<usize>>>,
     infected_when: Vec<Vec<Vec<usize>>>,
+    initial_active_susceptible: Vec<Vec<Vec<usize>>>,
+    initial_vaccinated: Vec<Vec<Vec<usize>>>,
     prevalence: Vec<Vec<usize>>,
     removed_when: Vec<Vec<Vec<usize>>>,
     vaccinated: Vec<Vec<usize>>,
     vaccinated_when: Vec<Vec<Vec<usize>>>,
-    zealots: Vec<Vec<usize>>,
+    zealots: Vec<Vec<Vec<usize>>>,
 }
 
 impl AssembledAgeOutput {
@@ -583,12 +588,17 @@ impl AssembledAgeOutput {
         age: Vec<Vec<usize>>,
         convinced_when: Vec<Vec<Vec<usize>>>,
         degree: Vec<Vec<Vec<usize>>>,
+        final_active_susceptible: Vec<Vec<Vec<usize>>>,
+        final_prevalence: Vec<Vec<Vec<usize>>>,
+        final_vaccinated: Vec<Vec<Vec<usize>>>,
         infected_when: Vec<Vec<Vec<usize>>>,
+        initial_active_susceptible: Vec<Vec<Vec<usize>>>,
+        initial_vaccinated: Vec<Vec<Vec<usize>>>,
         prevalence: Vec<Vec<usize>>,
         removed_when: Vec<Vec<Vec<usize>>>,
         vaccinated: Vec<Vec<usize>>,
         vaccinated_when: Vec<Vec<Vec<usize>>>,
-        zealots: Vec<Vec<usize>>,
+        zealots: Vec<Vec<Vec<usize>>>,
     ) -> Self {
         Self { 
             activation_potential,
@@ -596,7 +606,12 @@ impl AssembledAgeOutput {
             age,
             convinced_when, 
             degree,
+            final_active_susceptible,
+            final_prevalence,
+            final_vaccinated,
             infected_when, 
+            initial_active_susceptible,
+            initial_vaccinated,
             prevalence, 
             removed_when, 
             vaccinated, 
@@ -672,6 +687,65 @@ impl AssembledAgentOutput {
     }
 }
 
+#[derive(Serialize)]
+pub struct AssembledAttitudeOutput {
+    activation_potential: Vec<Vec<Vec<usize>>>,
+    active: Vec<Vec<usize>>,
+    age: Vec<Vec<Vec<usize>>>,
+    convinced_when: Vec<Vec<Vec<usize>>>,
+    degree: Vec<Vec<Vec<usize>>>,
+    final_active_susceptible: Vec<Vec<Vec<usize>>>,
+    final_prevalence: Vec<Vec<Vec<usize>>>,
+    final_vaccinated: Vec<Vec<Vec<usize>>>,
+    infected_when: Vec<Vec<Vec<usize>>>,
+    initial_active_susceptible: Vec<Vec<Vec<usize>>>,
+    initial_vaccinated: Vec<Vec<Vec<usize>>>,
+    prevalence: Vec<Vec<usize>>,
+    removed_when: Vec<Vec<Vec<usize>>>,
+    vaccinated: Vec<Vec<usize>>,
+    vaccinated_when: Vec<Vec<Vec<usize>>>,
+    zealots: Vec<Vec<Vec<usize>>>,
+}
+
+impl AssembledAttitudeOutput {
+    pub fn new(
+        activation_potential: Vec<Vec<Vec<usize>>>,
+        active: Vec<Vec<usize>>,
+        age: Vec<Vec<Vec<usize>>>,
+        convinced_when: Vec<Vec<Vec<usize>>>,
+        degree: Vec<Vec<Vec<usize>>>,
+        final_active_susceptible: Vec<Vec<Vec<usize>>>,
+        final_prevalence: Vec<Vec<Vec<usize>>>,
+        final_vaccinated: Vec<Vec<Vec<usize>>>,
+        infected_when: Vec<Vec<Vec<usize>>>,
+        initial_active_susceptible: Vec<Vec<Vec<usize>>>,
+        initial_vaccinated: Vec<Vec<Vec<usize>>>,
+        prevalence: Vec<Vec<usize>>,
+        removed_when: Vec<Vec<Vec<usize>>>,
+        vaccinated: Vec<Vec<usize>>,
+        vaccinated_when: Vec<Vec<Vec<usize>>>,
+        zealots: Vec<Vec<Vec<usize>>>,
+    ) -> Self {
+        Self { 
+            activation_potential,
+            active, 
+            age,
+            convinced_when, 
+            degree,
+            final_active_susceptible,
+            final_prevalence,
+            final_vaccinated,
+            infected_when, 
+            initial_active_susceptible,
+            initial_vaccinated,
+            prevalence, 
+            removed_when, 
+            vaccinated, 
+            vaccinated_when, 
+            zealots,
+        }
+    }
+}
 
 #[derive(Serialize)]
 pub struct AssembledClusterAttitudeOutput {
@@ -759,37 +833,55 @@ impl AssembledClusterOpinionHealthOutput {
 
 #[derive(Serialize)]
 pub struct AssembledDegreeOutput {
+    activation_potential: Vec<Vec<Vec<usize>>>,
     active: Vec<Vec<usize>>,
     age: Vec<Vec<Vec<usize>>>,
     convinced_when: Vec<Vec<Vec<usize>>>,
     degree: Vec<Vec<usize>>,
+    final_active_susceptible: Vec<Vec<Vec<usize>>>,
+    final_prevalence: Vec<Vec<Vec<usize>>>,
+    final_vaccinated: Vec<Vec<Vec<usize>>>,
     infected_when: Vec<Vec<Vec<usize>>>,
+    initial_active_susceptible: Vec<Vec<Vec<usize>>>,
+    initial_vaccinated: Vec<Vec<Vec<usize>>>,
     prevalence: Vec<Vec<usize>>,
     removed_when: Vec<Vec<Vec<usize>>>,
     vaccinated: Vec<Vec<usize>>,
     vaccinated_when: Vec<Vec<Vec<usize>>>,
-    zealots: Vec<Vec<usize>>,
+    zealots: Vec<Vec<Vec<usize>>>,
 }
 
 impl AssembledDegreeOutput {
     pub fn new(
+        activation_potential: Vec<Vec<Vec<usize>>>,
         active: Vec<Vec<usize>>,
         age: Vec<Vec<Vec<usize>>>,
         convinced_when: Vec<Vec<Vec<usize>>>,
         degree: Vec<Vec<usize>>,
+        final_active_susceptible: Vec<Vec<Vec<usize>>>,
+        final_prevalence: Vec<Vec<Vec<usize>>>,
+        final_vaccinated: Vec<Vec<Vec<usize>>>,
         infected_when: Vec<Vec<Vec<usize>>>,
+        initial_active_susceptible: Vec<Vec<Vec<usize>>>,
+        initial_vaccinated: Vec<Vec<Vec<usize>>>,
         prevalence: Vec<Vec<usize>>,
         removed_when: Vec<Vec<Vec<usize>>>,
         vaccinated: Vec<Vec<usize>>,
         vaccinated_when: Vec<Vec<Vec<usize>>>,
-        zealots: Vec<Vec<usize>>,
+        zealots: Vec<Vec<Vec<usize>>>,
     ) -> Self {
         Self { 
-            age, 
+            activation_potential,
             active, 
+            age,
             convinced_when, 
             degree,
+            final_active_susceptible,
+            final_prevalence,
+            final_vaccinated,
             infected_when, 
+            initial_active_susceptible,
+            initial_vaccinated,
             prevalence, 
             removed_when, 
             vaccinated, 
@@ -1221,27 +1313,33 @@ impl OutputEnsemble {
         let mut age = vec![vec![0; PAR_AGE_GROUPS]; nsims];
         let mut convinced_when = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut degree = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
+        let mut final_active_susceptible = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
+        let mut final_prevalence = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
+        let mut final_vaccinated = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut infected_when = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
+        let mut initial_active_susceptible = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
+        let mut initial_vaccinated = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut prevalence = vec![vec![0; PAR_AGE_GROUPS]; nsims];
         let mut removed_when = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut vaccinated = vec![vec![0; PAR_AGE_GROUPS]; nsims];
         let mut vaccinated_when = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
-        let mut zealots = vec![vec![0; PAR_AGE_GROUPS]; nsims];
+        let mut zealots = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
 
         for s in 0..nsims {
             for i in 0..nagents {
                 let a = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].age.unwrap();
                 let status = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].status.unwrap();
-                let threshold = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].threshold.unwrap();
 
                 age[s][a] += 1;
                 degree[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].degree.unwrap());
                 
                 activation_potential[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].activation_potential.unwrap());
-
-                if threshold > 1.0 {
-                    zealots[s][a] += 1;
-                }
+                final_active_susceptible[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_active_susceptible.unwrap());
+                final_prevalence[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_prevalence.unwrap());
+                final_vaccinated[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_vaccinated.unwrap());
+                initial_active_susceptible[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].initial_active_susceptible.unwrap());
+                initial_vaccinated[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].initial_vaccinated.unwrap());
+                zealots[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].zealots.unwrap());
 
                 match status {
                     Status::ActRem => {
@@ -1277,7 +1375,12 @@ impl OutputEnsemble {
             age, 
             convinced_when, 
             degree, 
+            final_active_susceptible,
+            final_prevalence,
+            final_vaccinated,
             infected_when, 
+            initial_active_susceptible,
+            initial_vaccinated,
             prevalence, 
             removed_when, 
             vaccinated, 
@@ -1356,6 +1459,102 @@ impl OutputEnsemble {
         )
     }
 
+    pub fn assemble_attitude_observables(
+        &mut self, 
+        input: &Input,
+    ) -> AssembledAttitudeOutput {
+        let nsims = self.number_of_simulations();
+        let nagents = input.network.unwrap().size;
+
+        let mut activation_potential = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut active = vec![vec![0; PAR_ATTITUDE_GROUPS]; nsims];
+        let mut age = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut convinced_when = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut degree = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut final_active_susceptible = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut final_prevalence = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut final_vaccinated = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut infected_when = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut initial_active_susceptible = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut initial_vaccinated = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut prevalence = vec![vec![0; PAR_ATTITUDE_GROUPS]; nsims];
+        let mut removed_when = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut vaccinated = vec![vec![0; PAR_ATTITUDE_GROUPS]; nsims];
+        let mut vaccinated_when = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut zealots = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+
+        for s in 0..nsims {
+            for i in 0..nagents {
+                let attitude = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].attitude.unwrap();
+                let status = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].status.unwrap();
+
+                let a = match attitude {
+                    Attitude::Vaccinated => {0},
+                    Attitude::Soon => {1},
+                    Attitude::Someone => {2},
+                    Attitude::Most => {3},
+                    Attitude::Never => {4},
+                };
+
+                age[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].age.unwrap());
+                degree[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].degree.unwrap());
+                
+                activation_potential[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].activation_potential.unwrap());
+                final_active_susceptible[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_active_susceptible.unwrap());
+                final_prevalence[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_prevalence.unwrap());
+                final_vaccinated[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_vaccinated.unwrap());
+                initial_active_susceptible[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].initial_active_susceptible.unwrap());
+                initial_vaccinated[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].initial_vaccinated.unwrap());
+                zealots[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].zealots.unwrap());
+
+                match status {
+                    Status::ActRem => {
+                        active[s][a] += 1;
+                        convinced_when[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].convinced_when.unwrap());
+                        infected_when[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].infected_when.unwrap());
+                        prevalence[s][a] += 1;
+                        removed_when[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].removed_when.unwrap());
+                    },
+                    Status::ActSus => {
+                        active[s][a] += 1;
+                        convinced_when[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].convinced_when.unwrap());
+                    },
+                    Status::ActVac => {
+                        active[s][a] += 1;
+                        convinced_when[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].convinced_when.unwrap());
+                        vaccinated[s][a] += 1;
+                        vaccinated_when[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].vaccinated_when.unwrap());
+                    },
+                    Status::HesRem => {
+                        infected_when[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].infected_when.unwrap());
+                        prevalence[s][a] += 1;
+                        removed_when[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].removed_when.unwrap());
+                    },
+                    _ => {},
+                };
+            }
+        }
+
+        AssembledAttitudeOutput::new(
+            activation_potential,
+            active, 
+            age, 
+            convinced_when, 
+            degree, 
+            final_active_susceptible,
+            final_prevalence,
+            final_vaccinated,
+            infected_when, 
+            initial_active_susceptible,
+            initial_vaccinated,
+            prevalence, 
+            removed_when, 
+            vaccinated, 
+            vaccinated_when, 
+            zealots,
+        )
+    }
+
     pub fn assemble_cluster_observables(&mut self) -> AssembledClusterOpinionHealthOutput {
         let nsims = self.number_of_simulations() as usize;
         let mut as_clusters = vec![vec![]; nsims];
@@ -1399,31 +1598,41 @@ impl OutputEnsemble {
     ) -> AssembledDegreeOutput {
         let nsims = self.number_of_simulations();
         let nagents = input.network.unwrap().size;
-       
-        let mut active = vec![vec![0; nagents - 1]; nsims];
-        let mut age = vec![vec![Vec::new(); nagents - 1]; nsims];
-        let mut convinced_when = vec![vec![Vec::new(); nagents - 1]; nsims];
-        let mut degree = vec![vec![0; nagents - 1]; nsims];
-        let mut infected_when = vec![vec![Vec::new(); nagents - 1]; nsims];
-        let mut prevalence = vec![vec![0; nagents - 1]; nsims];
-        let mut removed_when = vec![vec![Vec::new(); nagents - 1]; nsims];
-        let mut vaccinated = vec![vec![0; nagents - 1]; nsims];
-        let mut vaccinated_when = vec![vec![Vec::new(); nagents - 1]; nsims];
-        let mut zealots = vec![vec![0; nagents - 1]; nsims];
+        let eff_max_degree = (nagents as f64 / 10.0) as usize; 
+        
+        let mut activation_potential = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut active = vec![vec![0; eff_max_degree]; nsims];
+        let mut age = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut convinced_when = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut degree = vec![vec![0; eff_max_degree]; nsims];
+        let mut final_active_susceptible = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut final_prevalence = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut final_vaccinated = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut infected_when = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut initial_active_susceptible = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut initial_vaccinated = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut prevalence = vec![vec![0; eff_max_degree]; nsims];
+        let mut removed_when = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut vaccinated = vec![vec![0; eff_max_degree]; nsims];
+        let mut vaccinated_when = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut zealots = vec![vec![Vec::new(); eff_max_degree]; nsims];
 
         for s in 0..nsims {
             for i in 0..nagents {
                 let a = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].age.unwrap();
                 let k = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].degree.unwrap();
                 let status = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].status.unwrap();
-                let threshold = self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].threshold.unwrap();
 
                 age[s][k].push(a);
                 degree[s][k] += 1;
 
-                if threshold > 1.0 {
-                    zealots[s][k] += 1;
-                }
+                activation_potential[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].activation_potential.unwrap());
+                final_active_susceptible[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_active_susceptible.unwrap());
+                final_prevalence[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_prevalence.unwrap());
+                final_vaccinated[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_vaccinated.unwrap());
+                initial_active_susceptible[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].initial_active_susceptible.unwrap());
+                initial_vaccinated[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].initial_vaccinated.unwrap());
+                zealots[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].zealots.unwrap());
 
                 match status {
                     Status::ActRem => {
@@ -1454,11 +1663,17 @@ impl OutputEnsemble {
         }
 
         AssembledDegreeOutput::new(
+            activation_potential,
             active, 
             age, 
             convinced_when, 
             degree, 
+            final_active_susceptible,
+            final_prevalence,
+            final_vaccinated,
             infected_when, 
+            initial_active_susceptible,
+            initial_vaccinated,
             prevalence, 
             removed_when, 
             vaccinated, 
@@ -1682,6 +1897,28 @@ impl OutputEnsemble {
             }
         }
     
+        if pars.output.unwrap().attitude {
+            let pars_replica = Input::new(pars.algorithm, pars.epidemic, pars.network, pars.opinion, pars.output, pars.vaccination);
+    
+            let assembled_attitude_output = self.assemble_attitude_observables(&pars_replica);
+    
+            let output_to_serialize = SerializedAttitudeAssembly {
+                attitude: assembled_attitude_output,
+                pars: pars_replica,
+            };
+    
+            let serialized = serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
+    
+            let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
+            let attitude_string = HEADER_ATTITUDE.to_owned() + &exp_string.to_string();
+            let file_name = write_file_name(&pars, attitude_string, true);
+
+            let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
+            path.push(FOLDER_RESULTS);
+            path.push(format!("{}{}", file_name, EXTENSION_RESULTS));
+            std::fs::write(path, serialized).unwrap();
+        }
+
         if pars.output.unwrap().cluster {
             let assembled_cluster_output = 
             self.assemble_cluster_observables();
@@ -1892,6 +2129,7 @@ pub struct OutputPars {
     pub age: bool,
     pub agent: bool,
     pub agent_raw: bool,
+    pub attitude: bool,
     pub cluster: bool,
     pub cluster_raw: bool,
     pub degree: bool,
@@ -1907,6 +2145,7 @@ impl OutputPars {
         age: bool,
         agent: bool,
         agent_raw: bool,
+        attitude: bool,
         cluster: bool,
         cluster_raw: bool,
         degree: bool,
@@ -1920,6 +2159,7 @@ impl OutputPars {
             age,
             agent,
             agent_raw,
+            attitude,
             cluster,
             cluster_raw,
             degree,
@@ -1977,6 +2217,12 @@ pub struct SerializedAgentAssembly {
 pub struct SerializedAgentAssemblyTwoWaves {
     pub agent_w1: AssembledAgentOutput,
     pub agent_w2: AssembledAgentOutput,
+    pub pars: Input,
+}
+
+#[derive(Serialize)]
+pub struct SerializedAttitudeAssembly {
+    pub attitude: AssembledAttitudeOutput,
     pub pars: Input,
 }
 

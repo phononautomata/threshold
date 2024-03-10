@@ -388,7 +388,129 @@ def plot_state_attribute_stratified_observable(
     plt.tight_layout()
 
     full_path = os.path.join(cwd_path, lower_path_figures)
-    filename = ut.trim_file_extension(filename)
+    base_name = 'bar_' + target_state + '_' + target_attribute + '_' + target_observable + '_' + str(target_var)
+    extension_list = ['pdf', 'png']
+    if not os.path.exists(full_path):
+        os.makedirs(full_path)
+    for ext in extension_list:
+        full_name = os.path.join(full_path, base_name + '.' + ext)
+        plt.savefig(full_name, format=ext, bbox_inches='tight')
+    plt.clf()
+
+def plot_state_attribute_stratified_panel(
+        lower_path_results=lower_path_results, 
+        prevalence_cutoff=prevalence_cutoff,
+        target_attribute=None,
+        target_observable=None,
+        target_state=None,
+        target_var=None,
+        age_norm_flag=True,):
+    header = header_project + target_attribute + '_' + multilayer_exp_string
+    
+    fullpath = os.path.join(cwd_path, lower_path_results)
+    filenames_epi = ut.collect_pickle_filenames(fullpath=fullpath, header=header)
+
+    for i, filename in enumerate(filenames_epi):
+        print("Loop {0}. Filename: {1}".format(i + 1, filename))
+
+        fullname = os.path.join(cwd_path, lower_path_results, filename)
+
+        state_string = filename.split('_3_')[1].split('_')[0]
+        var_value = float(filename.split('_var')[1].split('_')[0])
+
+        before, after = ut.find_nth_occurrence(filename, '_n', 2)
+        n = int(after.split('_')[0])
+    
+        if state_string == target_state and var_value == target_var:
+            output = ut.load_output(fullname, main_keys=[target_attribute], observable_keys=[target_observable, 'age'])
+
+            prevalence_sa = output['prevalence']
+            prevalence_s = np.sum(prevalence_sa, axis=1) / n
+            failed_outbreaks = ut.extract_failed_outbreaks(prevalence_s, prevalence_cutoff=prevalence_cutoff)
+
+            filtered_prevalence_s = np.delete(prevalence_s, failed_outbreaks)
+
+            pop_sa = np.array(output['age'])
+
+            if age_norm_flag:
+                n = pop_sa
+    
+            processed_dict = {}
+            for key, val in output.items():
+                if 'time' not in key and 'when' not in key:
+                    val = np.array(val) / n
+                    filt_obs = ut.filter_observable_array(observable_distribution=val, failed_outbreaks=failed_outbreaks)
+                    stat_obs = ut.stat_stratified_attribute_observable_array(filt_obs)
+                else:
+                    filt_obs = ut.filter_observable_list(observable_distribution_list=val, failed_outbreaks=failed_outbreaks)
+                    stat_obs = ut.stat_stratified_attribute_observable_list(filt_obs)
+                processed_dict[key] = stat_obs
+            
+            norm_pop_sa = pop_sa / np.sum(pop_sa[:], axis=1)[:, np.newaxis]
+            stat_obs = ut.stat_stratified_attribute_observable_array(norm_pop_sa)
+            processed_dict['pop_age'] = stat_obs
+
+    ngroups = len(processed_dict['prevalence'])
+    age_groups = [str(age) for age in range(ngroups)]
+
+    distributed_observable_list = ['degree', 'convinced_when', 'infected_when', 'removed_when', 'vaccinated_when']
+
+    fig, ax = plt.subplots(nrows=3, ncols=4, figsize=(10, 6))
+
+    if target_observable in distributed_observable_list:
+        dist_avg_per_age = processed_dict[target_observable]['dist_avg_per_age']
+        dist_l95_per_age = processed_dict[target_observable]['dist_l95_per_age']
+        dist_u95_per_age = processed_dict[target_observable]['dist_u95_per_age']
+        error_lower = dist_avg_per_age - dist_l95_per_age
+        error_upper = dist_u95_per_age - dist_avg_per_age
+
+        dist_avg_global = processed_dict[target_observable]['dist_avg_global']
+        dist_l95_global = processed_dict[target_observable]['dist_l95_global']
+        dist_u95_global = processed_dict[target_observable]['dist_u95_global']
+
+        ax[0, 0].plot(age_groups, dist_avg_per_age, yerr=[error_lower, error_upper], color='royalblue', capsize=5, ecolor='cornflowerblue')
+
+        ax[0, 0].axhline(dist_avg_global, color='crimson', linestyle='dashed',)
+        ax[0, 0].fill_between(age_groups, dist_l95_global, dist_u95_global, color='crimson', alpha=0.2)
+    
+    else:
+        obs_avg_per_age = np.array([processed_dict[target_observable][age]['avg'] for age in range(ngroups)])
+        obs_l95_per_age = np.array([processed_dict[target_observable][age]['l95'] for age in range(ngroups)])
+        obs_u95_per_age = np.array([processed_dict[target_observable][age]['u95'] for age in range(ngroups)])
+        error_lower = obs_avg_per_age - obs_l95_per_age
+        error_upper = obs_u95_per_age - obs_avg_per_age
+
+        ax[0,].bar(age_groups, obs_avg_per_age, yerr=[error_lower, error_upper], color='royalblue', capsize=5, ecolor='cornflowerblue')
+        
+        if target_observable == 'prevalence' and age_norm_flag:
+            global_prevalence = np.mean(filtered_prevalence_s)
+            ax.axhline(global_prevalence, color='crimson', linestyle='dashed')
+        elif target_observable == 'prevalence' and age_norm_flag == False:
+            pop_avg_per_age = np.array([processed_dict['pop_age'][age]['avg'] for age in range(ngroups)])
+            pop_l95_per_age = np.array([processed_dict['pop_age'][age]['l95'] for age in range(ngroups)])
+            pop_u95_per_age = np.array([processed_dict['pop_age'][age]['avg'] for age in range(ngroups)])
+            pop_error_lower = pop_avg_per_age - pop_l95_per_age
+            pop_error_upper = pop_u95_per_age - pop_avg_per_age
+
+            ax.bar(age_groups, pop_avg_per_age, yerr=[pop_error_lower, pop_error_upper], color='firebrick', capsize=5, ecolor='salmon', alpha=0.2)
+        else:
+            pass
+
+    ax.set_xlabel('age group', fontsize=20)
+    ax.set_ylabel('{0}'.format(target_observable), fontsize=20)
+    ax.set_title('{0} by {1}'.format(target_observable, target_attribute))
+
+    plt.xticks(rotation=45)
+    ax.tick_params(axis='x', labelsize=6)
+
+    plt.rcParams.update({'font.size': 15})
+    plt.rc('axes', labelsize=20)
+    plt.rcParams['xtick.labelsize'] = 20
+    plt.rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.tight_layout()
+
+    full_path = os.path.join(cwd_path, lower_path_figures)
     base_name = 'bar_' + target_state + '_' + target_attribute + '_' + target_observable + '_' + str(target_var)
     extension_list = ['pdf', 'png']
     if not os.path.exists(full_path):
@@ -656,9 +778,6 @@ def plot_all_vaccination_curves(lower_path_results, prevalence_cutoff=prevalence
         plt.savefig(full_name, format=ext, bbox_inches='tight')
     plt.clf()
 
-def plot_all_attribute_stratified_panel(lower_path_results, prevalence_cutoff=prevalence_cutoff, target_var=0):
-    pass
-
 def plot_all_scatter_panel(lower_path_results, target_observable=['prevalence'], prevalence_cutoff=prevalence_cutoff, target_var=[0]):
     vaccination_data = ut.load_vaccination_data(cwd_path)
 
@@ -827,6 +946,82 @@ def plot_all_scatter_panel(lower_path_results, target_observable=['prevalence'],
         plt.savefig(full_name, format=ext, bbox_inches='tight')
     plt.clf()
 
+def plot_state_cluster( 
+        prevalence_cutoff=prevalence_cutoff,
+        target_attribute=None,
+        target_cluster=None,
+        target_state=None,
+        target_var=None,
+        age_norm_flag=True,
+        ):
+    header = header_project + target_attribute + '_' + multilayer_exp_string
+    
+    fullpath = os.path.join(cwd_path, lower_path_results)
+    filenames_epi = ut.collect_pickle_filenames(fullpath=fullpath, header=header)
+
+    for i, filename in enumerate(filenames_epi):
+        print("Loop {0}. Filename: {1}".format(i + 1, filename))
+
+        fullname = os.path.join(cwd_path, lower_path_results, filename)
+
+        state_string = filename.split('_3_')[1].split('_')[0]
+        var_value = float(filename.split('_var')[1].split('_')[0])
+
+        before, after = ut.find_nth_occurrence(filename, '_n', 2)
+        n = int(after.split('_')[0])
+    
+        if state_string == target_state and var_value == target_var:
+            output = ut.load_output(fullname, main_keys=[target_attribute], observable_keys=[target_cluster, 'age'])
+
+            prevalence_sa = output['prevalence']
+            prevalence_s = np.sum(prevalence_sa, axis=1) / n
+            failed_outbreaks = ut.extract_failed_outbreaks(prevalence_s, prevalence_cutoff=prevalence_cutoff)
+
+            filtered_prevalence_s = np.delete(prevalence_s, failed_outbreaks)
+
+            pop_sa = np.array(output['age'])
+
+            if age_norm_flag:
+                n = pop_sa
+    
+            processed_dict = {}
+            for key, val in output.items():
+                if 'time' not in key and 'when' not in key:
+                    val = np.array(val) / n
+                    filt_obs = ut.filter_observable_array(observable_distribution=val, failed_outbreaks=failed_outbreaks)
+                    stat_obs = ut.stat_stratified_attribute_observable_array(filt_obs)
+                else:
+                    filt_obs = ut.filter_observable_list(observable_distribution_list=val, failed_outbreaks=failed_outbreaks)
+                    stat_obs = ut.stat_stratified_attribute_observable_list(filt_obs)
+                processed_dict[key] = stat_obs
+            
+            norm_pop_sa = pop_sa / np.sum(pop_sa[:], axis=1)[:, np.newaxis]
+            stat_obs = ut.stat_stratified_attribute_observable_array(norm_pop_sa)
+            processed_dict['pop_age'] = stat_obs
+
+    # Specify the number of bins and density parameter
+    num_bins = 30
+    density = True
+
+    # Create a new figure and axis objects
+    fig, axs = plt.subplots(4, 2, figsize=(12, 8))
+
+    plt.rcParams.update({'font.size': 15})
+    plt.rc('axes', labelsize=20)
+    plt.rcParams['xtick.labelsize'] = 20
+    plt.rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.tight_layout()
+
+    full_path = os.path.join(cwd_path, lower_path_figures)
+    base_name = 'cluster_' + target_cluster + '_' + target_state + '_' + str(target_var)
+    extension_list = ['pdf', 'png']
+    if not os.path.exists(full_path):
+        os.makedirs(full_path)
+    for ext in extension_list:
+        full_name = os.path.join(full_path, base_name + '.' + ext)
+        plt.savefig(full_name, format=ext, bbox_inches='tight')
+    plt.clf()
 
 #plot_state_age_structure_data(state_id='Massachusetts', rebuild_flag=False, comp_flag=True)
 #plot_all_global_observable(lower_path_results='results', prevalence_cutoff=prevalence_cutoff, target_observable='prevalence', target_var=0, )

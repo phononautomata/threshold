@@ -39,6 +39,7 @@
         "age": true,
         "agent": true,
         "agent_raw": true,
+        "attitude": true,
         "cluster": true,
         "cluster_raw": true,
         "degree": true,

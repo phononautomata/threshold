@@ -341,7 +341,7 @@ fn measure_attitude_clusters(agent_ensemble: &AgentEnsemble) -> ClusterAttitudeO
 }
 
 #[allow(dead_code)]
-fn measure_cascading_clusters(_agent_ensemble: &mut AgentEnsemble) -> ClusterCascadingOutput {
+fn measure_cascading_clusters(_agent_ensemble: &mut AgentEnsemble, cascading_potential: &[usize]) -> ClusterCascadingOutput {
     todo!()
 }
 
@@ -682,7 +682,8 @@ pub fn watts_sir_coupled_model_multilayer(
 
         let cluster_output = if pars.output.unwrap().cluster {
             let attitude_cluster = measure_attitude_clusters(agent_ensemble);
-            let cascading_cluster = measure_cascading_clusters(agent_ensemble);
+            let cascading_potential_vec = agent_ensemble.cascading_potential();
+            let cascading_cluster = measure_cascading_clusters(agent_ensemble, &cascading_potential_vec);
             Some(ClusterOutput::new(Some(attitude_cluster), Some(cascading_cluster), None))
         } else {
             None

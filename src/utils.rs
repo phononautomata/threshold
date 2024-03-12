@@ -416,8 +416,10 @@ struct AgentOutput {
     pub activation_potential: Option<usize>,
     pub age: Option<usize>,
     pub attitude: Option<Attitude>,
+    pub cascading_threshold: Option<usize>,
     pub convinced_when: Option<usize>,
     pub degree: Option<usize>,
+    pub effective_threshold: Option<f64>,
     pub final_active_susceptible: Option<usize>,
     pub final_prevalence: Option<usize>,
     pub final_vaccinated: Option<usize>,
@@ -439,8 +441,10 @@ impl AgentOutput {
         activation_potential: Option<usize>,
         age: Option<usize>,
         attitude: Option<Attitude>,
+        cascading_threshold: Option<usize>,
         convinced_when: Option<usize>,
         degree: Option<usize>,
+        effective_threshold: Option<f64>,
         final_active_susceptible: Option<usize>,
         final_prevalence: Option<usize>,
         final_vaccinated: Option<usize>,
@@ -460,8 +464,10 @@ impl AgentOutput {
             activation_potential,
             age,
             attitude,
+            cascading_threshold,
             convinced_when,
             degree,
+            effective_threshold,
             final_active_susceptible,
             final_prevalence,
             final_vaccinated,
@@ -493,8 +499,10 @@ impl AgentEnsembleOutput {
             let activation_potential = agent.activation_potential.unwrap_or(INIT_USIZE);
             let age = agent.age;
             let attitude = agent.attitude.unwrap_or(INIT_ATTITUDE);
+            let cascading_potential = agent.cascading_threshold.unwrap();
             let convinced_when = agent.convinced_when.unwrap_or(INIT_USIZE);
             let degree = agent.neighbors.len();
+            let effective_threshold = agent.effective_threshold.unwrap();
             let final_active_susceptible = agent.final_active_susceptible.unwrap_or(INIT_USIZE);
             let final_vaccinated = agent.final_vaccinated.unwrap_or(INIT_USIZE);
             let final_prevalence = agent.final_prevalence.unwrap_or(INIT_USIZE);
@@ -514,8 +522,10 @@ impl AgentEnsembleOutput {
                 Some(activation_potential),
                 Some(age),
                 Some(attitude),
+                Some(cascading_potential),
                 Some(convinced_when),
                 Some(degree),
+                Some(effective_threshold),
                 Some(final_active_susceptible),
                 Some(final_prevalence),
                 Some(final_vaccinated),
@@ -563,49 +573,55 @@ impl AlgorithmPars {
 
 #[derive(Serialize)]
 pub struct AssembledAgeOutput {
-    activation_potential: Vec<Vec<Vec<usize>>>,
-    active: Vec<Vec<usize>>,
-    age: Vec<Vec<usize>>,
-    convinced_when: Vec<Vec<Vec<usize>>>,
-    degree: Vec<Vec<Vec<usize>>>,
-    final_active_susceptible: Vec<Vec<Vec<usize>>>,
-    final_prevalence: Vec<Vec<Vec<usize>>>,
-    final_vaccinated: Vec<Vec<Vec<usize>>>,
-    infected_when: Vec<Vec<Vec<usize>>>,
-    initial_active_susceptible: Vec<Vec<Vec<usize>>>,
-    initial_vaccinated: Vec<Vec<Vec<usize>>>,
-    prevalence: Vec<Vec<usize>>,
-    removed_when: Vec<Vec<Vec<usize>>>,
-    vaccinated: Vec<Vec<usize>>,
-    vaccinated_when: Vec<Vec<Vec<usize>>>,
-    zealots: Vec<Vec<Vec<usize>>>,
+    activation_potential: Option<Vec<Vec<Vec<usize>>>>,
+    active: Option<Vec<Vec<usize>>>,
+    age: Option<Vec<Vec<usize>>>,
+    cascading_threshold: Option<Vec<Vec<Vec<usize>>>>,
+    convinced_when: Option<Vec<Vec<Vec<usize>>>>,
+    degree: Option<Vec<Vec<Vec<usize>>>>,
+    effective_threshold: Option<Vec<Vec<Vec<f64>>>>,
+    final_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+    final_prevalence: Option<Vec<Vec<Vec<usize>>>>,
+    final_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+    infected_when: Option<Vec<Vec<Vec<usize>>>>,
+    initial_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+    initial_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+    prevalence: Option<Vec<Vec<usize>>>,
+    removed_when: Option<Vec<Vec<Vec<usize>>>>,
+    vaccinated: Option<Vec<Vec<usize>>>,
+    vaccinated_when: Option<Vec<Vec<Vec<usize>>>>,
+    zealots: Option<Vec<Vec<Vec<usize>>>>,
 }
 
 impl AssembledAgeOutput {
     pub fn new(
-        activation_potential: Vec<Vec<Vec<usize>>>,
-        active: Vec<Vec<usize>>,
-        age: Vec<Vec<usize>>,
-        convinced_when: Vec<Vec<Vec<usize>>>,
-        degree: Vec<Vec<Vec<usize>>>,
-        final_active_susceptible: Vec<Vec<Vec<usize>>>,
-        final_prevalence: Vec<Vec<Vec<usize>>>,
-        final_vaccinated: Vec<Vec<Vec<usize>>>,
-        infected_when: Vec<Vec<Vec<usize>>>,
-        initial_active_susceptible: Vec<Vec<Vec<usize>>>,
-        initial_vaccinated: Vec<Vec<Vec<usize>>>,
-        prevalence: Vec<Vec<usize>>,
-        removed_when: Vec<Vec<Vec<usize>>>,
-        vaccinated: Vec<Vec<usize>>,
-        vaccinated_when: Vec<Vec<Vec<usize>>>,
-        zealots: Vec<Vec<Vec<usize>>>,
+        activation_potential: Option<Vec<Vec<Vec<usize>>>>,
+        active: Option<Vec<Vec<usize>>>,
+        age: Option<Vec<Vec<usize>>>,
+        cascading_threshold: Option<Vec<Vec<Vec<usize>>>>,
+        convinced_when: Option<Vec<Vec<Vec<usize>>>>,
+        degree: Option<Vec<Vec<Vec<usize>>>>,
+        effective_threshold: Option<Vec<Vec<Vec<f64>>>>,
+        final_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+        final_prevalence: Option<Vec<Vec<Vec<usize>>>>,
+        final_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+        infected_when: Option<Vec<Vec<Vec<usize>>>>,
+        initial_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+        initial_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+        prevalence: Option<Vec<Vec<usize>>>,
+        removed_when: Option<Vec<Vec<Vec<usize>>>>,
+        vaccinated: Option<Vec<Vec<usize>>>,
+        vaccinated_when: Option<Vec<Vec<Vec<usize>>>>,
+        zealots: Option<Vec<Vec<Vec<usize>>>>,
     ) -> Self {
         Self { 
             activation_potential,
             active, 
             age,
+            cascading_threshold,
             convinced_when, 
             degree,
+            effective_threshold,
             final_active_susceptible,
             final_prevalence,
             final_vaccinated,
@@ -689,49 +705,55 @@ impl AssembledAgentOutput {
 
 #[derive(Serialize)]
 pub struct AssembledAttitudeOutput {
-    activation_potential: Vec<Vec<Vec<usize>>>,
-    active: Vec<Vec<usize>>,
-    age: Vec<Vec<Vec<usize>>>,
-    convinced_when: Vec<Vec<Vec<usize>>>,
-    degree: Vec<Vec<Vec<usize>>>,
-    final_active_susceptible: Vec<Vec<Vec<usize>>>,
-    final_prevalence: Vec<Vec<Vec<usize>>>,
-    final_vaccinated: Vec<Vec<Vec<usize>>>,
-    infected_when: Vec<Vec<Vec<usize>>>,
-    initial_active_susceptible: Vec<Vec<Vec<usize>>>,
-    initial_vaccinated: Vec<Vec<Vec<usize>>>,
-    prevalence: Vec<Vec<usize>>,
-    removed_when: Vec<Vec<Vec<usize>>>,
-    vaccinated: Vec<Vec<usize>>,
-    vaccinated_when: Vec<Vec<Vec<usize>>>,
-    zealots: Vec<Vec<Vec<usize>>>,
+    activation_potential: Option<Vec<Vec<Vec<usize>>>>,
+    active: Option<Vec<Vec<usize>>>,
+    age: Option<Vec<Vec<Vec<usize>>>>,
+    cascading_threshold: Option<Vec<Vec<Vec<usize>>>>,
+    convinced_when: Option<Vec<Vec<Vec<usize>>>>,
+    degree: Option<Vec<Vec<Vec<usize>>>>,
+    effective_threshold: Option<Vec<Vec<Vec<f64>>>>,
+    final_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+    final_prevalence: Option<Vec<Vec<Vec<usize>>>>,
+    final_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+    infected_when: Option<Vec<Vec<Vec<usize>>>>,
+    initial_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+    initial_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+    prevalence: Option<Vec<Vec<usize>>>,
+    removed_when: Option<Vec<Vec<Vec<usize>>>>,
+    vaccinated: Option<Vec<Vec<usize>>>,
+    vaccinated_when: Option<Vec<Vec<Vec<usize>>>>,
+    zealots: Option<Vec<Vec<Vec<usize>>>>,
 }
 
 impl AssembledAttitudeOutput {
     pub fn new(
-        activation_potential: Vec<Vec<Vec<usize>>>,
-        active: Vec<Vec<usize>>,
-        age: Vec<Vec<Vec<usize>>>,
-        convinced_when: Vec<Vec<Vec<usize>>>,
-        degree: Vec<Vec<Vec<usize>>>,
-        final_active_susceptible: Vec<Vec<Vec<usize>>>,
-        final_prevalence: Vec<Vec<Vec<usize>>>,
-        final_vaccinated: Vec<Vec<Vec<usize>>>,
-        infected_when: Vec<Vec<Vec<usize>>>,
-        initial_active_susceptible: Vec<Vec<Vec<usize>>>,
-        initial_vaccinated: Vec<Vec<Vec<usize>>>,
-        prevalence: Vec<Vec<usize>>,
-        removed_when: Vec<Vec<Vec<usize>>>,
-        vaccinated: Vec<Vec<usize>>,
-        vaccinated_when: Vec<Vec<Vec<usize>>>,
-        zealots: Vec<Vec<Vec<usize>>>,
+        activation_potential: Option<Vec<Vec<Vec<usize>>>>,
+        active: Option<Vec<Vec<usize>>>,
+        age: Option<Vec<Vec<Vec<usize>>>>,
+        cascading_threshold: Option<Vec<Vec<Vec<usize>>>>,
+        convinced_when: Option<Vec<Vec<Vec<usize>>>>,
+        degree: Option<Vec<Vec<Vec<usize>>>>,
+        effective_threshold: Option<Vec<Vec<Vec<f64>>>>,
+        final_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+        final_prevalence: Option<Vec<Vec<Vec<usize>>>>,
+        final_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+        infected_when: Option<Vec<Vec<Vec<usize>>>>,
+        initial_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+        initial_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+        prevalence: Option<Vec<Vec<usize>>>,
+        removed_when: Option<Vec<Vec<Vec<usize>>>>,
+        vaccinated: Option<Vec<Vec<usize>>>,
+        vaccinated_when: Option<Vec<Vec<Vec<usize>>>>,
+        zealots: Option<Vec<Vec<Vec<usize>>>>,
     ) -> Self {
         Self { 
             activation_potential,
             active, 
             age,
+            cascading_threshold,
             convinced_when, 
             degree,
+            effective_threshold,
             final_active_susceptible,
             final_prevalence,
             final_vaccinated,
@@ -833,49 +855,55 @@ impl AssembledClusterOpinionHealthOutput {
 
 #[derive(Serialize)]
 pub struct AssembledDegreeOutput {
-    activation_potential: Vec<Vec<Vec<usize>>>,
-    active: Vec<Vec<usize>>,
-    age: Vec<Vec<Vec<usize>>>,
-    convinced_when: Vec<Vec<Vec<usize>>>,
-    degree: Vec<Vec<usize>>,
-    final_active_susceptible: Vec<Vec<Vec<usize>>>,
-    final_prevalence: Vec<Vec<Vec<usize>>>,
-    final_vaccinated: Vec<Vec<Vec<usize>>>,
-    infected_when: Vec<Vec<Vec<usize>>>,
-    initial_active_susceptible: Vec<Vec<Vec<usize>>>,
-    initial_vaccinated: Vec<Vec<Vec<usize>>>,
-    prevalence: Vec<Vec<usize>>,
-    removed_when: Vec<Vec<Vec<usize>>>,
-    vaccinated: Vec<Vec<usize>>,
-    vaccinated_when: Vec<Vec<Vec<usize>>>,
-    zealots: Vec<Vec<Vec<usize>>>,
+    activation_potential: Option<Vec<Vec<Vec<usize>>>>,
+    active: Option<Vec<Vec<usize>>>,
+    age: Option<Vec<Vec<Vec<usize>>>>,
+    cascading_threshold: Option<Vec<Vec<Vec<usize>>>>,
+    convinced_when: Option<Vec<Vec<Vec<usize>>>>,
+    degree: Option<Vec<Vec<usize>>>,
+    effective_threshold: Option<Vec<Vec<Vec<f64>>>>,
+    final_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+    final_prevalence: Option<Vec<Vec<Vec<usize>>>>,
+    final_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+    infected_when: Option<Vec<Vec<Vec<usize>>>>,
+    initial_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+    initial_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+    prevalence: Option<Vec<Vec<usize>>>,
+    removed_when: Option<Vec<Vec<Vec<usize>>>>,
+    vaccinated: Option<Vec<Vec<usize>>>,
+    vaccinated_when: Option<Vec<Vec<Vec<usize>>>>,
+    zealots: Option<Vec<Vec<Vec<usize>>>>,
 }
 
 impl AssembledDegreeOutput {
     pub fn new(
-        activation_potential: Vec<Vec<Vec<usize>>>,
-        active: Vec<Vec<usize>>,
-        age: Vec<Vec<Vec<usize>>>,
-        convinced_when: Vec<Vec<Vec<usize>>>,
-        degree: Vec<Vec<usize>>,
-        final_active_susceptible: Vec<Vec<Vec<usize>>>,
-        final_prevalence: Vec<Vec<Vec<usize>>>,
-        final_vaccinated: Vec<Vec<Vec<usize>>>,
-        infected_when: Vec<Vec<Vec<usize>>>,
-        initial_active_susceptible: Vec<Vec<Vec<usize>>>,
-        initial_vaccinated: Vec<Vec<Vec<usize>>>,
-        prevalence: Vec<Vec<usize>>,
-        removed_when: Vec<Vec<Vec<usize>>>,
-        vaccinated: Vec<Vec<usize>>,
-        vaccinated_when: Vec<Vec<Vec<usize>>>,
-        zealots: Vec<Vec<Vec<usize>>>,
+        activation_potential: Option<Vec<Vec<Vec<usize>>>>,
+        active: Option<Vec<Vec<usize>>>,
+        age: Option<Vec<Vec<Vec<usize>>>>,
+        cascading_threshold: Option<Vec<Vec<Vec<usize>>>>,
+        convinced_when: Option<Vec<Vec<Vec<usize>>>>,
+        degree: Option<Vec<Vec<usize>>>,
+        effective_threshold: Option<Vec<Vec<Vec<f64>>>>,
+        final_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+        final_prevalence: Option<Vec<Vec<Vec<usize>>>>,
+        final_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+        infected_when: Option<Vec<Vec<Vec<usize>>>>,
+        initial_active_susceptible: Option<Vec<Vec<Vec<usize>>>>,
+        initial_vaccinated: Option<Vec<Vec<Vec<usize>>>>,
+        prevalence: Option<Vec<Vec<usize>>>,
+        removed_when: Option<Vec<Vec<Vec<usize>>>>,
+        vaccinated: Option<Vec<Vec<usize>>>,
+        vaccinated_when: Option<Vec<Vec<Vec<usize>>>>,
+        zealots: Option<Vec<Vec<Vec<usize>>>>,
     ) -> Self {
         Self { 
             activation_potential,
             active, 
             age,
+            cascading_threshold,
             convinced_when, 
             degree,
+            effective_threshold,
             final_active_susceptible,
             final_prevalence,
             final_vaccinated,
@@ -1311,8 +1339,10 @@ impl OutputEnsemble {
         let mut activation_potential = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut active = vec![vec![0; PAR_AGE_GROUPS]; nsims];
         let mut age = vec![vec![0; PAR_AGE_GROUPS]; nsims];
+        let mut cascading_threshold = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut convinced_when = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut degree = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
+        let mut effective_threshold = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut final_active_susceptible = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut final_prevalence = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut final_vaccinated = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
@@ -1334,6 +1364,8 @@ impl OutputEnsemble {
                 degree[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].degree.unwrap());
                 
                 activation_potential[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].activation_potential.unwrap());
+                cascading_threshold[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].cascading_threshold.unwrap());
+                effective_threshold[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].effective_threshold.unwrap());
                 final_active_susceptible[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_active_susceptible.unwrap());
                 final_prevalence[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_prevalence.unwrap());
                 final_vaccinated[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_vaccinated.unwrap());
@@ -1370,22 +1402,24 @@ impl OutputEnsemble {
         }
 
         AssembledAgeOutput::new(
-            activation_potential,
-            active, 
-            age, 
-            convinced_when, 
-            degree, 
-            final_active_susceptible,
-            final_prevalence,
-            final_vaccinated,
-            infected_when, 
-            initial_active_susceptible,
-            initial_vaccinated,
-            prevalence, 
-            removed_when, 
-            vaccinated, 
-            vaccinated_when, 
-            zealots,
+            Some(activation_potential),
+            Some(active), 
+            Some(age), 
+            Some(cascading_threshold),
+            Some(convinced_when), 
+            Some(degree), 
+            Some(effective_threshold),
+            Some(final_active_susceptible),
+            Some(final_prevalence),
+            Some(final_vaccinated),
+            Some(infected_when), 
+            Some(initial_active_susceptible),
+            Some(initial_vaccinated),
+            Some(prevalence), 
+            Some(removed_when), 
+            Some(vaccinated), 
+            Some(vaccinated_when), 
+            Some(zealots),
         )
     }
 
@@ -1469,8 +1503,10 @@ impl OutputEnsemble {
         let mut activation_potential = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
         let mut active = vec![vec![0; PAR_ATTITUDE_GROUPS]; nsims];
         let mut age = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut cascading_threshold = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
         let mut convinced_when = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
         let mut degree = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
+        let mut effective_threshold = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
         let mut final_active_susceptible = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
         let mut final_prevalence = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
         let mut final_vaccinated = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
@@ -1500,6 +1536,8 @@ impl OutputEnsemble {
                 degree[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].degree.unwrap());
                 
                 activation_potential[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].activation_potential.unwrap());
+                cascading_threshold[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].cascading_threshold.unwrap());
+                effective_threshold[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].effective_threshold.unwrap());
                 final_active_susceptible[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_active_susceptible.unwrap());
                 final_prevalence[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_prevalence.unwrap());
                 final_vaccinated[s][a].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_vaccinated.unwrap());
@@ -1536,22 +1574,24 @@ impl OutputEnsemble {
         }
 
         AssembledAttitudeOutput::new(
-            activation_potential,
-            active, 
-            age, 
-            convinced_when, 
-            degree, 
-            final_active_susceptible,
-            final_prevalence,
-            final_vaccinated,
-            infected_when, 
-            initial_active_susceptible,
-            initial_vaccinated,
-            prevalence, 
-            removed_when, 
-            vaccinated, 
-            vaccinated_when, 
-            zealots,
+            Some(activation_potential),
+            Some(active), 
+            Some(age), 
+            Some(cascading_threshold),
+            Some(convinced_when), 
+            Some(degree), 
+            Some(effective_threshold),
+            Some(final_active_susceptible),
+            Some(final_prevalence),
+            Some(final_vaccinated),
+            Some(infected_when), 
+            Some(initial_active_susceptible),
+            Some(initial_vaccinated),
+            Some(prevalence), 
+            Some(removed_when), 
+            Some(vaccinated),
+            Some(vaccinated_when), 
+            Some(zealots),
         )
     }
 
@@ -1603,8 +1643,10 @@ impl OutputEnsemble {
         let mut activation_potential = vec![vec![Vec::new(); eff_max_degree]; nsims];
         let mut active = vec![vec![0; eff_max_degree]; nsims];
         let mut age = vec![vec![Vec::new(); eff_max_degree]; nsims];
+        let mut cascading_threshold = vec![vec![Vec::new(); eff_max_degree]; nsims];
         let mut convinced_when = vec![vec![Vec::new(); eff_max_degree]; nsims];
         let mut degree = vec![vec![0; eff_max_degree]; nsims];
+        let mut effective_threshold = vec![vec![Vec::new(); eff_max_degree]; nsims];
         let mut final_active_susceptible = vec![vec![Vec::new(); eff_max_degree]; nsims];
         let mut final_prevalence = vec![vec![Vec::new(); eff_max_degree]; nsims];
         let mut final_vaccinated = vec![vec![Vec::new(); eff_max_degree]; nsims];
@@ -1627,6 +1669,8 @@ impl OutputEnsemble {
                 degree[s][k] += 1;
 
                 activation_potential[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].activation_potential.unwrap());
+                cascading_threshold[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].cascading_threshold.unwrap());
+                effective_threshold[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].effective_threshold.unwrap());
                 final_active_susceptible[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_active_susceptible.unwrap());
                 final_prevalence[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_prevalence.unwrap());
                 final_vaccinated[s][k].push(self.inner_mut()[s].agent_ensemble.as_ref().unwrap().inner[i].final_vaccinated.unwrap());
@@ -1663,22 +1707,24 @@ impl OutputEnsemble {
         }
 
         AssembledDegreeOutput::new(
-            activation_potential,
-            active, 
-            age, 
-            convinced_when, 
-            degree, 
-            final_active_susceptible,
-            final_prevalence,
-            final_vaccinated,
-            infected_when, 
-            initial_active_susceptible,
-            initial_vaccinated,
-            prevalence, 
-            removed_when, 
-            vaccinated, 
-            vaccinated_when, 
-            zealots
+            Some(activation_potential),
+            Some(active), 
+            Some(age), 
+            Some(cascading_threshold),
+            Some(convinced_when), 
+            Some(degree), 
+            Some(effective_threshold),
+            Some(final_active_susceptible),
+            Some(final_prevalence),
+            Some(final_vaccinated),
+            Some(infected_when), 
+            Some(initial_active_susceptible),
+            Some(initial_vaccinated),
+            Some(prevalence), 
+            Some(removed_when), 
+            Some(vaccinated), 
+            Some(vaccinated_when), 
+            Some(zealots),
         )
     }
 

@@ -1027,4 +1027,4 @@ def plot_state_cluster(
 #plot_all_global_observable(lower_path_results='results', prevalence_cutoff=prevalence_cutoff, target_observable='prevalence', target_var=0, )
 #plot_state_attribute_stratified_observable(lower_path_results='results', prevalence_cutoff=prevalence_cutoff, target_attribute='age', target_observable='prevalence', target_state='Massachusetts', target_var=0.005, age_norm_flag=False)
 #plot_all_vaccination_curves(lower_path_results='results', prevalence_cutoff=prevalence_cutoff)
-plot_all_scatter_panel(lower_path_results='results', target_observable=['prevalence', 'convinced', 'vaccinated'], prevalence_cutoff=prevalence_cutoff, target_var=[0.001, 0.005012, 0.01])
+#plot_all_scatter_panel(lower_path_results='results', target_observable=['prevalence', 'convinced', 'vaccinated'], prevalence_cutoff=prevalence_cutoff, target_var=[0.001, 0.005012, 0.01])

@@ -151,7 +151,7 @@ pub struct Agent {
     pub attitude: Option<Attitude>,
     pub cascading_threshold: Option<usize>,
     pub convinced_when: Option<usize>,
-    pub effective_threshold: Option<usize>,
+    pub effective_threshold: Option<f64>,
     pub final_active_susceptible: Option<usize>,
     pub final_prevalence: Option<usize>,
     pub final_vaccinated: Option<usize>,
@@ -180,7 +180,7 @@ impl Agent {
             activation_potential: Some(1),
             attitude: Some(Attitude::Never),
             cascading_threshold: Some(1),
-            effective_threshold: Some(1),
+            effective_threshold: Some(1.0),
             final_active_susceptible: None,
             final_prevalence: None,
             final_vaccinated: None,
@@ -441,8 +441,74 @@ impl AgentEnsemble {
         self.inner().iter().map(|agent| agent.status).collect()
     }
 
-    pub fn cascading_potential(&self) -> Vec<usize> {
-        todo!()
+    pub fn cascading_threshold(&mut self) -> Vec<usize> {
+        let nagents = self.number_of_agents();
+        let mut cascading_threshold_vec = vec![0; nagents];
+
+        let attitudes: Vec<Attitude> = self.inner().iter().filter_map(|agent| agent.attitude).collect();
+    
+        for (agent_idx, agent) in self.inner_mut().iter_mut().enumerate() {
+            let attitude = agent.attitude.unwrap();
+            let degree = agent.degree;
+
+            let cascading_threshold = match attitude {
+                Attitude::Vaccinated => {1},
+                Attitude::Soon => {1},
+                Attitude::Someone => {
+                    let neighbors = agent.neighbors.clone();
+
+                    let mut cascade_assistant = 0;
+
+                    for &neigh_idx in &neighbors {   
+                        match attitudes[neigh_idx] {
+                            Attitude::Vaccinated => {
+                                cascade_assistant += 1
+                            },
+                            Attitude::Soon => {
+                                cascade_assistant += 1
+                            },
+                            _ => {},        
+                        }
+                    }
+
+                    if cascade_assistant >= 1 {
+                        1
+                    } else {
+                        0
+                    }
+                },
+                Attitude::Most => {
+                    let neighbors = agent.neighbors.clone();
+
+                    let mut cascade_assistant = 0;
+
+                    for &neigh_idx in &neighbors {   
+                        match attitudes[neigh_idx] {
+                            Attitude::Vaccinated => {
+                                cascade_assistant += 1
+                            },
+                            Attitude::Soon => {
+                                cascade_assistant += 1
+                            },
+                            _ => {},        
+                        }
+                    }
+
+                    if cascade_assistant as f64 / degree as f64  >= 0.5 {
+                        1
+                    } else {
+                        0
+                    }
+                },
+                Attitude::Never => {0},
+            };
+
+            agent.cascading_threshold = Some(cascading_threshold);
+
+            cascading_threshold_vec[agent_idx] = cascading_threshold;
+        }
+
+        cascading_threshold_vec
     }
 
     pub fn clear_epidemic_consequences(&mut self) {
@@ -571,6 +637,39 @@ impl AgentEnsemble {
             .filter(|agent| agent.status == Status::ActVac)
             .map(|agent| agent.id)
             .collect()
+    }
+
+    pub fn gather_degree_bottom_to_top(&self) -> Vec<usize> {
+        let mut agents_with_degrees: Vec<(usize, usize)> = self.inner().iter()
+        .enumerate()
+        .map(|(id, agent)| (id, agent.neighbors.len()))
+        .collect();
+
+        agents_with_degrees.sort_by(|a, b| a.1.cmp(&b.1));
+
+        // Extract the agent IDs, discarding the degrees
+        let sorted_agent_ids: Vec<usize> = agents_with_degrees.into_iter()
+            .map(|(id, _)| id)
+            .collect();
+
+        sorted_agent_ids
+    }
+
+    pub fn gather_degree_top_to_bottom(&self) -> Vec<usize> {
+        let mut agents_with_degrees: Vec<(usize, usize)> = self.inner().iter()
+        .enumerate()
+        .map(|(id, agent)| (id, agent.neighbors.len()))
+        .collect();
+
+        // Sort by degree in decreasing order. If you want to sort by increasing order, use `.sort_by_key(|&(_, degree)| degree);`
+        agents_with_degrees.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Extract the agent IDs, discarding the degrees
+        let sorted_agent_ids: Vec<usize> = agents_with_degrees.into_iter()
+            .map(|(id, _)| id)
+            .collect();
+
+        sorted_agent_ids
     }
 
     pub fn gather_elders(&self) -> Vec<usize> {
@@ -1690,13 +1789,13 @@ impl AgentEnsemble {
                 todo!()
             },
             VaccinationPolicy::DegreeBottom => {
-                todo!()
+                self.target_degree_bottom_to_top(vaccination_quota)
             },
             VaccinationPolicy::DegreeRandom => {
                 self.target_random(vaccination_quota)
             },
             VaccinationPolicy::DegreeTop => {
-                todo!()
+                self.target_degree_top_to_bottom(vaccination_quota)
             },
             VaccinationPolicy::Random => {
                 self.target_random(vaccination_quota)
@@ -1824,6 +1923,58 @@ impl AgentEnsemble {
             }
             agent.vaccination_target = true;
             target_quota += 1.0 / nagents as f64;
+        }
+    }
+
+    pub fn target_degree_bottom_to_top(&mut self, vaccination_quota: f64) {
+        let mut target_quota = 0.0;
+        let nagents = self.number_of_agents();
+
+        let mut agents_with_degrees: Vec<(usize, usize)> = self.inner().iter()
+        .enumerate()
+        .map(|(id, agent)| (id, agent.neighbors.len()))
+        .collect();
+
+        agents_with_degrees.sort_by(|a, b| a.1.cmp(&b.1));
+
+        let bottom_to_top_ids: Vec<usize> = agents_with_degrees.into_iter()
+            .map(|(id, _)| id)
+            .collect();
+
+        for id in bottom_to_top_ids {
+            if target_quota >= vaccination_quota {
+                break;
+            }
+            if self.inner()[id].age < CONST_UNDERAGE_THRESHOLD {
+                self.inner_mut()[id].vaccination_target = true;
+                target_quota += 1.0 / nagents as f64;   
+            }
+        }
+    }
+
+    pub fn target_degree_top_to_bottom(&mut self, vaccination_quota: f64) {
+        let mut target_quota = 0.0;
+        let nagents = self.number_of_agents();
+        
+        let mut agents_with_degrees: Vec<(usize, usize)> = self.inner().iter()
+        .enumerate()
+        .map(|(id, agent)| (id, agent.neighbors.len()))
+        .collect();
+
+        agents_with_degrees.sort_by(|a, b| b.1.cmp(&a.1));
+
+        let top_to_bottom_ids: Vec<usize> = agents_with_degrees.into_iter()
+            .map(|(id, _)| id)
+            .collect();
+
+        for id in top_to_bottom_ids {
+            if target_quota >= vaccination_quota {
+                break;
+            }
+            if self.inner()[id].age < CONST_UNDERAGE_THRESHOLD {
+                self.inner_mut()[id].vaccination_target = true;
+                target_quota += 1.0 / nagents as f64;   
+            }
         }
     }
 

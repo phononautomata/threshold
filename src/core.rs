@@ -252,7 +252,6 @@ fn infection_step_agent(
         (hes_inf_a, act_inf_a)
     }
 
-#[allow(dead_code)]
 fn measure_attitude_clusters(agent_ensemble: &AgentEnsemble) -> ClusterAttitudeOutput {
     let mut already_clusters = Vec::new();
     let mut soon_clusters = Vec::new();
@@ -340,9 +339,90 @@ fn measure_attitude_clusters(agent_ensemble: &AgentEnsemble) -> ClusterAttitudeO
     )
 }
 
-#[allow(dead_code)]
-fn measure_cascading_clusters(_agent_ensemble: &mut AgentEnsemble, cascading_potential: &[usize]) -> ClusterCascadingOutput {
-    todo!()
+fn measure_cascading_clusters(agent_ensemble: &mut AgentEnsemble) -> ClusterCascadingOutput {
+    let mut cascading_clusters = Vec::new();
+    let mut nonzealot_clusters = Vec::new();
+ 
+    // Initialize visited array and stack
+    let nagents = agent_ensemble.number_of_agents();
+    let mut ca_clustered = vec![false; nagents];
+    let mut ca_stack = Vec::new();
+    let mut nz_clustered = vec![false; nagents];
+    let mut nz_stack = Vec::new();
+
+    for a in 0..nagents {
+        if !ca_clustered[a] {
+            // Initialize new cluster
+            let mut cluster = Vec::new();
+            ca_stack.push(a);
+            ca_clustered[a] = true;
+
+            let a_threshold = agent_ensemble.inner()[a].threshold;
+            let a_cascading_threshold = agent_ensemble.inner()[a].cascading_threshold.unwrap();
+
+            // Check for zealots
+            if a_threshold < 1.0 {
+                // DFS
+                while let Some(u) = ca_stack.pop() {
+                    // Add u to the current cluster
+                    cluster.push(u);
+                    ca_clustered[u] = true;
+
+                    // Add unvisited neighbors with matching status or threshold to stack
+                    for v in agent_ensemble.inner()[u].neighbors.clone() {
+                        if !ca_clustered[v] {
+                            let v_cascading_threshold = agent_ensemble.inner()[v].cascading_threshold.unwrap();
+                            if v_cascading_threshold == a_cascading_threshold && a_cascading_threshold == 0 {
+                                ca_stack.push(v);
+                                ca_clustered[v] = true;
+                            }
+                        }
+                    }
+                }
+
+                // Add cluster to corresponding vector
+                cascading_clusters.push(cluster.len()); 
+            }
+        }
+
+        if !nz_clustered[a] {
+            // Initialize new cluster
+            let mut cluster = Vec::new();
+            nz_stack.push(a);
+            nz_clustered[a] = true;
+
+            let a_threshold = agent_ensemble.inner()[a].threshold;
+
+            // Check for zealots
+            if a_threshold < 1.0 {
+                // DFS
+                while let Some(u) = ca_stack.pop() {
+                    // Add u to the current cluster
+                    cluster.push(u);
+                    nz_clustered[u] = true;
+
+                    // Add unvisited neighbors with matching status or threshold to stack
+                    for v in agent_ensemble.inner()[u].neighbors.clone() {
+                        if !nz_clustered[v] {
+                            let v_threshold = agent_ensemble.inner()[v].threshold;
+                            if v_threshold < 1.0 && a_threshold < 1.0 {
+                                nz_stack.push(v);
+                                nz_clustered[v] = true;
+                            }
+                        }
+                    }
+                }
+
+                // Add cluster to corresponding vector
+                nonzealot_clusters.push(cluster.len()); 
+            }
+        }
+    }
+
+    ClusterCascadingOutput::new(
+        cascading_clusters, 
+        nonzealot_clusters, 
+    )
 }
 
 fn measure_opinion_health_clusters(agent_ensemble: &AgentEnsemble) -> ClusterOpinionHealthOutput {
@@ -682,8 +762,8 @@ pub fn watts_sir_coupled_model_multilayer(
 
         let cluster_output = if pars.output.unwrap().cluster {
             let attitude_cluster = measure_attitude_clusters(agent_ensemble);
-            let cascading_potential_vec = agent_ensemble.cascading_potential();
-            let cascading_cluster = measure_cascading_clusters(agent_ensemble, &cascading_potential_vec);
+            agent_ensemble.cascading_threshold();
+            let cascading_cluster = measure_cascading_clusters(agent_ensemble);
             Some(ClusterOutput::new(Some(attitude_cluster), Some(cascading_cluster), None))
         } else {
             None

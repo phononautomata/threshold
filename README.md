@@ -51,13 +51,12 @@ This section provides an overview of the main directories and files in the proje
   - **/raw/**: Raw data files used in simulations and analysis.
   - **/curated/**: Processed data that is ready for analysis or model feeding.
 - **/src/**: Source code for the project, including both Rust and Python code.
-  - **/rust/**: Rust source files for the performance-critical components of the project.
-  - **/python/**: Python scripts for analysis, data processing, and utility functions.
 - **/scripts/**: Bash scripts for automation tasks such as setup, build, and deployment.
 - **/notebooks/**: Jupyter notebooks for interactive data analysis, results reproduction, and figures generation.
 - **/results/**:
   - **/temp/**: Temporary results from simulations and analyses.
-  - **/final/**: Final results used in reports and papers, including generated figures.
+  - **/plots/**: Final results used in the plotting functions for reports and papers.
+- **/figures/**: Result .png or vectorial for reports and papers.
 - **Dockerfile**: Containerization of the project.
 - **Makefile**: Contains commands for common tasks such as setup, build, test, and clean.
 - **README.md**: You are reading me, yes!

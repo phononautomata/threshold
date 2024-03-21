@@ -56,7 +56,7 @@ This section provides an overview of the main directories and files in the proje
 - **/results/**:
   - **/temp/**: Temporary results from simulations and analyses.
   - **/plots/**: Final results used in the plotting functions for reports and papers.
-- **/figures/**: Result .png or vectorial for reports and papers.
+- **/figures/**: Result .png or vectorial files for reports and papers.
 - **Dockerfile**: Containerization of the project.
 - **Makefile**: Contains commands for common tasks such as setup, build, test, and clean.
 - **README.md**: You are reading me, yes!

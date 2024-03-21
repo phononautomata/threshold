@@ -85,4 +85,4 @@ The core model's simulations are performed by executing Rust code with specific 
 TODO
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE.md) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) file for details.

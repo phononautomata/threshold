@@ -1,5 +1,4 @@
 /target
-/results/
 /lit/
 /legacy/
 *.pickle

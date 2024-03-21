@@ -17,6 +17,7 @@ Before you start, ensure you have the following installed on your system:
 
 - **Git**: For cloning the repository.
 - **Python**: This project uses Python for some scripting and analysis utilities. [Download and install Python](https://www.python.org/downloads/). This project has been tested with Python 3.9.
+- **Jupyter Notebooks**: For reproducing curated results and generating figures, Jupyter notebooks are used. After installing Python, Jupyter can be installed via pip: ```pip install jupyterlab
 - **Rust**: Model's core is written in Rust. [Install Rust](https://www.rust-lang.org/tools/install) by following the official instructions.
 - **Docker**: For ease of setup and deployment, this project is containerized with Docker. [Install Docker Desktop](https://docs.docker.com/desktop/) for your operating system.
 
@@ -41,6 +42,48 @@ Follow these steps to get your development environment running:
    ```
    This command automatically sets up the project environment. Specifically, it creates a Python virtual environment, installs required Python packages, and compiles Rust components.
 
+## Project Structure
+
+This section provides an overview of the main directories and files in the project, explaining their purpose and how they fit into the overall project.
+
+- **/config/**: Configuration files and environment variables necessary for the project.
+- **/data/**:
+  - **/raw/**: Raw data files used in simulations and analysis.
+  - **/curated/**: Processed data that is ready for analysis or model feeding.
+- **/src/**: Source code for the project, including both Rust and Python code.
+  - **/rust/**: Rust source files for the performance-critical components of the project.
+  - **/python/**: Python scripts for analysis, data processing, and utility functions.
+- **/scripts/**: Bash scripts for automation tasks such as setup, build, and deployment.
+- **/notebooks/**: Jupyter notebooks for interactive data analysis, results reproduction, and figures generation.
+- **/results/**:
+  - **/temp/**: Temporary results from simulations and analyses.
+  - **/final/**: Final results used in reports and papers, including generated figures.
+- **/docker/**: Dockerfiles and related configuration files for containerization of the project.
+- **Makefile**: Contains commands for common tasks such as setup, build, test, and clean.
+- **README.md**: You are reading me, yes!
+- **LICENSE.md**: The license file specifying the terms under which the project is made available.
+
+## Usage examples
+This project can be utilized in two primary ways: running stochastic simulations through Rust code and reproducing curated results and figures using Jupyter notebooks. Below are instructions for both methods.
+
+### Running Stochastic Simulations with Rust
+
+The core model's simulations are performed by executing Rust code with specific flags. Here’s how to run a simulation:
+
+1. **Run simulations under config file default**:
+   ```bash
+   cargo run
+   ````
+
+2. **Run simulations with input parameters from command line**
+   ```bash
+   cargo run -r --
+   ```
+
+   TODO
+
+### Running Jupyter notebooks
+TODO
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](../LICENSE.md) file for details.

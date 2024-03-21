@@ -28,31 +28,19 @@ Follow these steps to get your development environment running:
    Start by cloning the project repository to your local machine.
    ```bash
    git clone https://github.com/phononautomata/threshold.git
+   ```
 
 2. **Run the Makefile**:
    From your terminal, navigate to the project directory:
-   ```cd threshold```
+   ```bash
+   cd threshold
+   ```
    And execute:
-   ```make setup```
+   ```bash
+   make setup
+   ```
    This command automatically sets up the project environment. Specifically, it creates a Python virtual environment, installs required Python packages, and compiles Rust components.
 
 
-
-
 ## License
-This project is licensed under the MIT License - see the `LICENSE.md` file for details.
- 
-   
-  
-
-
-
-1. **Project Details**: Can you provide a brief description of your project, including its purpose and key features?
-2. **Installation Steps**: Are there specific installation steps or prerequisites, especially given the mix of Python, Rust, and Docker in your project?
-3. **Testing**: How are tests run in your project?
-4. **Usage**: Are there specific examples of how to use your project that should be highlighted?
-5. **Contributing**: Do you have a contributing guide, or are there specific guidelines for contributors?
-6. **Versioning and Authors**: How do you handle versioning? Who are the main authors and contributors?
-7. **Acknowledgments**: Are there any acknowledgments or credits you'd like to include?
-
-Feel free to answer any of these questions or provide additional details, and we can iterate on crafting a README that best represents your project.
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE.md) file for details.

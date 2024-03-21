@@ -17,7 +17,7 @@ Before you start, ensure you have the following installed on your system:
 
 - **Git**: For cloning the repository.
 - **Python**: This project uses Python for some scripting and analysis utilities. [Download and install Python](https://www.python.org/downloads/). This project has been tested with Python 3.9.
-- **Jupyter Notebooks**: For reproducing curated results and generating figures, Jupyter notebooks are used. After installing Python, Jupyter can be installed via pip: ```pip install jupyterlab
+- **Jupyter Notebooks**: For reproducing curated results and generating figures, Jupyter notebooks are used. After installing Python, Jupyter can be installed via pip.
 - **Rust**: Model's core is written in Rust. [Install Rust](https://www.rust-lang.org/tools/install) by following the official instructions.
 - **Docker**: For ease of setup and deployment, this project is containerized with Docker. [Install Docker Desktop](https://docs.docker.com/desktop/) for your operating system.
 
@@ -58,7 +58,7 @@ This section provides an overview of the main directories and files in the proje
 - **/results/**:
   - **/temp/**: Temporary results from simulations and analyses.
   - **/final/**: Final results used in reports and papers, including generated figures.
-- **/docker/**: Dockerfiles and related configuration files for containerization of the project.
+- **Dockerfile**: Containerization of the project.
 - **Makefile**: Contains commands for common tasks such as setup, build, test, and clean.
 - **README.md**: You are reading me, yes!
 - **LICENSE.md**: The license file specifying the terms under which the project is made available.

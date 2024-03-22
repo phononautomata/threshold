@@ -1,5 +1,6 @@
 {
     "algorithm": {
+        "batch_size": 5,
         "experiment_id": 3,
         "nsims_dyn": 30,
         "nsims_net": 30,

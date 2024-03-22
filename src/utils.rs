@@ -1,26 +1,22 @@
-use rand::Rng;
-use serde_pickle::SerOptions;
-use std::cmp::Ordering;
-use std::fs::{File, self};
-use std::io::Read;
-use std::path::PathBuf;
-use std::collections::{HashSet, HashMap};
-use std::{vec, env};
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
+use serde_pickle::SerOptions;
+use std::{vec, env};
+use std::cmp::Ordering;
+use std::collections::{HashSet, HashMap};
+use std::fs::{File, self};
+use std::io::Read;
+use std::path::{PathBuf, Path};
+use std::time::{SystemTime, UNIX_EPOCH};
 use strum::Display;
 
 use crate::agent::{
     AgentEnsemble, Attitude, HesitancyAttributionModel, OpinionModel, SeedModel, Status, VaccinationPolicy
 };
 use crate::cons::{
-    CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS, FOLDER_RESULTS, HEADER_AGE, 
-    HEADER_AGENT, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, 
-    HEADER_ATTITUDE, HEADER_CLUSTER, HEADER_CLUSTER_DISTRIBUTION, 
-    HEADER_CLUSTER_STATS, HEADER_GLOBAL, HEADER_PROJECT, HEADER_REBUILD, 
-    HEADER_REBUILD_STATS, HEADER_TIME, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE, 
-    PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, 
-    PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF,
+    CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS, FOLDER_DATA_CUR, FOLDER_DATA_RAW, FOLDER_RESULTS, HEADER_AGE, HEADER_AGENT, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_ATTITUDE, HEADER_CLUSTER, HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_DEGREE, HEADER_GLOBAL, HEADER_PROJECT, HEADER_REBUILD, HEADER_REBUILD_STATS, HEADER_TIME, HEADER_TIME_STATS, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE, PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF
 };
 
 pub fn build_normalized_cdf(values: &mut [f64]) -> Vec<f64> {
@@ -95,6 +91,15 @@ pub fn compute_intralayer_average_degree(
     intralayer_average_degree
 }
 
+fn construct_file_path(
+    base_path: &Path, 
+    header: &str,
+    file_name_base: &str,
+    extension: &str,
+) -> Result<PathBuf, std::io::Error> {
+    Ok(base_path.join(format!("{}{}{}{}", HEADER_PROJECT, header, file_name_base, extension)))
+}
+
 pub fn convert_hm_value_to_bool(
     hash_map: HashMap<String, Value>,
 ) -> HashMap<String, bool> {
@@ -130,6 +135,66 @@ pub fn count_underaged(population_vector: &[f64]) -> f64 {
         .iter()
         .take(18)
         .sum()
+}
+
+pub fn create_output_files(
+    file_name_base: String, 
+    output_pars: OutputPars,
+) -> Result<HashMap<String, File>, std::io::Error> {
+    let mut output_file_map: HashMap<String, File> = HashMap::new();
+
+    let base_path = PathBuf::from(env::current_dir()?).join(FOLDER_RESULTS);
+    let extension = EXTENSION_RESULTS;
+
+    let outputs = vec![
+        (output_pars.age, HEADER_AGE),
+        (output_pars.agent_raw, HEADER_AGENT_DISTRIBUTION),
+        (output_pars.agent, HEADER_AGENT_STATS),
+        (output_pars.attitude, HEADER_ATTITUDE),
+        (output_pars.cluster_raw, HEADER_CLUSTER_DISTRIBUTION),
+        (output_pars.cluster, HEADER_CLUSTER_STATS),
+        (output_pars.degree, HEADER_DEGREE),
+        (output_pars.global, HEADER_GLOBAL),
+        (output_pars.rebuild_raw, HEADER_REBUILD),
+        (output_pars.rebuild, HEADER_REBUILD_STATS),
+        (output_pars.time_raw, HEADER_TIME),
+        (output_pars.time, HEADER_TIME_STATS),
+    ];
+
+    for (enabled, header) in outputs {
+        if enabled {
+            let file_path = construct_file_path(&base_path, header, &file_name_base, extension)?;
+            let file = File::create(&file_path)?;
+            output_file_map.insert(header.to_owned(), file);
+        }
+    }
+
+    Ok(output_file_map)
+}
+
+fn create_rng_with_time_seed() -> (StdRng, u64) {
+    // Get the current time as a duration since the UNIX_EPOCH
+    let start = SystemTime::now();
+    let since_the_epoch = start.duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+
+    // Use the duration in seconds as the seed
+    // Note: This simplistic approach may not provide a good distribution of seed values,
+    // especially considering the low-resolution timer on some systems.
+    // Consider using more bits of the time or a different method for production code.
+    let seed = since_the_epoch.as_secs();
+
+    // Convert the seed to an array that StdRng can use
+    // Note: This is a simple way to convert a u64 seed into a [u8; 32] array. For better
+    // randomness, consider a more sophisticated method to generate the seed array.
+    let seed_array = seed.to_be_bytes();
+    let mut seed_bytes = [0u8; 32];
+    seed_bytes[..8].copy_from_slice(&seed_array);
+    
+    // Create the RNG with the seed
+    let rng = StdRng::from_seed(seed_bytes);
+
+    (rng, seed)
 }
 
 pub fn load_json_config(
@@ -523,7 +588,7 @@ pub fn read_key_and_matrixf64_from_json(
     let mut path = 
     PathBuf::from(env::current_dir()
     .expect("Failed to get current directory"));
-    path.push("data");
+    path.push(FOLDER_DATA_RAW);
     path.push(format!("{}.json", filename));
 
     let mut file = File::open(&path).unwrap();
@@ -545,7 +610,7 @@ pub fn read_key_and_vecf64_from_json(
     filename: &str,
 ) -> Vec<f64> {
     let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
-    path.push("data");
+    path.push(FOLDER_DATA_CUR);
     path.push(format!("{}.json", filename));
 
     let mut file = File::open(&path).unwrap();
@@ -573,6 +638,72 @@ pub fn sample_from_cdf(cdf: &[f64]) -> usize {
 
     // Find the index where CDF[i] >= u
     cdf.iter().position(|&value| value >= u).unwrap_or(0)
+}
+
+fn save_batch_to_json(
+    output_file_map: &HashMap<String, File>, 
+    output_ensemble: &OutputEnsemble, 
+    pars: &Input,
+) -> io::Result<()> {
+
+    // Iterate over the file map
+    for (key, file) in output_file_map {
+
+        match key.as_str() {
+            HEADER_AGE => {
+                let assembled_age_output = output_ensemble.assemble_age_observables(pars);
+
+            },
+            HEADER_AGENT_DISTRIBUTION => {
+                
+            },
+            HEADER_AGENT_STATS => {
+                let assem
+
+            },
+            HEADER_ATTITUDE => {
+
+            },
+            HEADER_CLUSTER_DISTRIBUTION => {
+
+            },
+            HEADER_CLUSTER_STATS => {
+
+            },
+            HEADER_DEGREE => {
+
+            },
+            HEADER_GLOBAL => {
+
+            },
+            HEADER_REBUILD => {
+
+            }
+            HEADER_TIME => {
+
+            }
+            _ => {
+
+            }
+        }
+
+        // Assuming the file should be selected based on some property of 'key'
+        // Here, you need to determine how to select the appropriate data from output_ensemble based on 'key'
+        let data_to_serialize = match key.as_str() {
+            // Example case, you'll need to adjust this based on your actual data structure and requirements
+            "some_key" => &output_ensemble.some_property,
+            // Add other cases as needed
+            _ => continue, // Skip if key doesn't match known cases
+        };
+
+        // Serialize the data to a JSON string
+        let json = to_string_pretty(data_to_serialize).map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+        // Write the JSON data to the file
+        writeln!(file, "{}", json)?;
+    }
+
+    Ok(())
 }
 
 pub fn sir_prevalence(r0: f64, sus0: f64) -> f64 {
@@ -623,6 +754,25 @@ pub fn write_file_name(
     let vpars_chain = write_vaccination_string(&pars.vaccination.unwrap());
     let apars_chain = write_algorithm_string(&pars.algorithm.unwrap());
     head + &exp_id + &npars_chain + &opars_chain + &epars_chain + &vpars_chain + &apars_chain
+}
+
+pub fn write_file_name_base(
+    pars: &Input, 
+) -> String {
+    let exp_chain = format!("{}", pars.algorithm.unwrap().experiment_id);
+    let npars_chain = write_multilayer_string(pars.size);
+    let opars_chain = write_opinion_string(&pars.opinion.unwrap());
+    let epars_chain = write_epidemic_string(&pars.epidemic);
+    let vpars_chain = write_vaccination_string(&pars.vaccination.unwrap());
+    let apars_chain = write_algorithm_string(&pars.algorithm.unwrap());
+    exp_chain + &npars_chain + &opars_chain + &epars_chain + &vpars_chain + &apars_chain
+}
+
+pub fn write_file_name_full(
+    header: String,
+    file_name_base: String,
+) -> String {
+    header + &file_name_base
 }
 
 fn write_multilayer_string(size: usize) -> String {    
@@ -787,6 +937,7 @@ impl AgentEnsembleOutput {
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct AlgorithmPars {
+    pub batch_size: usize,
     pub experiment_id: usize,
     pub nsims_dyn: usize,
     pub nsims_net: usize,
@@ -795,12 +946,14 @@ pub struct AlgorithmPars {
 
 impl AlgorithmPars {
     pub fn new(
+        batch_size: usize,
         experiment_id: usize,
         nsims_dyn: usize,
         nsims_net: usize,
         t_max: usize,
     ) -> Self {
         Self {
+            batch_size,
             experiment_id,
             nsims_dyn,
             nsims_net,
@@ -877,46 +1030,46 @@ impl AssembledAgeOutput {
 
 #[derive(Serialize)]
 pub struct AssembledAgentOutput {
-    pub activation_potential: Vec<Vec<usize>>,
-    pub age: Vec<Vec<usize>>,
-    pub attitude: Vec<Vec<Attitude>>,
-    pub convinced_when: Vec<Vec<usize>>,
-    pub degree: Vec<Vec<usize>>,
-    pub final_active_susceptible: Vec<Vec<usize>>,
-    pub final_prevalence: Vec<Vec<usize>>,
-    pub final_vaccinated: Vec<Vec<usize>>,
-    pub id: Vec<Vec<usize>>,
-    pub infected_by: Vec<Vec<usize>>,
-    pub infected_when: Vec<Vec<usize>>,
-    pub initial_active_susceptible: Vec<Vec<usize>>,
-    pub initial_vaccinated: Vec<Vec<usize>>,
-    pub removed_when: Vec<Vec<usize>>,
-    pub status: Vec<Vec<Status>>,
-    pub threshold: Vec<Vec<f64>>,
-    pub vaccinated_when: Vec<Vec<usize>>,
-    pub zealots: Vec<Vec<usize>>,
+    pub activation_potential: Option<Vec<Vec<usize>>>,
+    pub age: Option<Vec<Vec<usize>>>,
+    pub attitude: Option<Vec<Vec<Attitude>>>,
+    pub convinced_when: Option<Vec<Vec<usize>>>,
+    pub degree: Option<Vec<Vec<usize>>>,
+    pub final_active_susceptible: Option<Vec<Vec<usize>>>,
+    pub final_prevalence: Option<Vec<Vec<usize>>>,
+    pub final_vaccinated: Option<Vec<Vec<usize>>>,
+    pub id: Option<Vec<Vec<usize>>>,
+    pub infected_by: Option<Vec<Vec<usize>>>,
+    pub infected_when: Option<Vec<Vec<usize>>>,
+    pub initial_active_susceptible: Option<Vec<Vec<usize>>>,
+    pub initial_vaccinated: Option<Vec<Vec<usize>>>,
+    pub removed_when: Option<Vec<Vec<usize>>>,
+    pub status: Option<Vec<Vec<Status>>>,
+    pub threshold: Option<Vec<Vec<f64>>>,
+    pub vaccinated_when: Option<Vec<Vec<usize>>>,
+    pub zealots: Option<Vec<Vec<usize>>>,
 }
 
 impl AssembledAgentOutput {
     pub fn new(
-        activation_potential: Vec<Vec<usize>>,
-        age: Vec<Vec<usize>>,
-        attitude: Vec<Vec<Attitude>>,
-        convinced_when: Vec<Vec<usize>>,
-        degree: Vec<Vec<usize>>,
-        final_active_susceptible: Vec<Vec<usize>>,
-        final_prevalence: Vec<Vec<usize>>,
-        final_vaccinated: Vec<Vec<usize>>,
-        id: Vec<Vec<usize>>,
-        infected_by: Vec<Vec<usize>>,
-        infected_when: Vec<Vec<usize>>,
-        initial_active_susceptible: Vec<Vec<usize>>,
-        initial_vaccinated: Vec<Vec<usize>>,
-        removed_when: Vec<Vec<usize>>,
-        status: Vec<Vec<Status>>,
-        threshold: Vec<Vec<f64>>,
-        vaccinated_when: Vec<Vec<usize>>,
-        zealots: Vec<Vec<usize>>,
+        activation_potential: Option<Vec<Vec<usize>>>,
+        age: Option<Vec<Vec<usize>>>,
+        attitude: Option<Vec<Vec<Attitude>>>,
+        convinced_when: Option<Vec<Vec<usize>>>,
+        degree: Option<Vec<Vec<usize>>>,
+        final_active_susceptible: Option<Vec<Vec<usize>>>,
+        final_prevalence: Option<Vec<Vec<usize>>>,
+        final_vaccinated: Option<Vec<Vec<usize>>>,
+        id: Option<Vec<Vec<usize>>>,
+        infected_by: Option<Vec<Vec<usize>>>,
+        infected_when: Option<Vec<Vec<usize>>>,
+        initial_active_susceptible: Option<Vec<Vec<usize>>>,
+        initial_vaccinated: Option<Vec<Vec<usize>>>,
+        removed_when: Option<Vec<Vec<usize>>>,
+        status: Option<Vec<Vec<Status>>>,
+        threshold: Option<Vec<Vec<f64>>>,
+        vaccinated_when: Option<Vec<Vec<usize>>>,
+        zealots: Option<Vec<Vec<usize>>>,
     ) -> Self {
         Self {
             activation_potential,
@@ -1542,6 +1695,10 @@ impl OutputEnsemble {
         &mut self.inner
     }
 
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+
     pub fn number_of_simulations(&self) -> usize {
         self.inner.len()
     }
@@ -1713,24 +1870,24 @@ impl OutputEnsemble {
         }
 
         AssembledAgentOutput::new(
-            activation_potential,
-            age,
-            attitude,
-            convinced_when,
-            degree, 
-            final_active_susceptible,
-            final_prevalence,
-            final_vaccinated,
-            id,
-            infected_by, 
-            infected_when, 
-            initial_active_susceptible,
-            initial_vaccinated,
-            removed_when, 
-            status, 
-            threshold, 
-            vaccinated_when,
-            zealots,
+            Some(activation_potential),
+            Some(age),
+            Some(attitude),
+            Some(convinced_when),
+            Some(degree), 
+            Some(final_active_susceptible),
+            Some(final_prevalence),
+            Some(final_vaccinated),
+            Some(id),
+            Some(infected_by), 
+            Some(infected_when), 
+            Some(initial_active_susceptible),
+            Some(initial_vaccinated),
+            Some(removed_when), 
+            Some(status), 
+            Some(threshold), 
+            Some(vaccinated_when),
+            Some(zealots),
         )
     }
 
@@ -3042,17 +3199,17 @@ fn calculate_stat_pack(values: &[f64]) -> StatPacker {
 pub fn compute_agent_distribution(
     assembled_agent_output: &AssembledAgentOutput,
 ) -> AgentDistributionPacker {
-    let convinced_when_seq_s = &assembled_agent_output.convinced_when;
-    let degree_seq_s = &assembled_agent_output.degree;
-    let final_active_seq_s = &assembled_agent_output.final_active_susceptible;
-    let final_prevalence_seq_s = &assembled_agent_output.final_prevalence;
-    let final_vaccinated_seq_s = &assembled_agent_output.final_vaccinated;
-    let infected_when_seq_s = &assembled_agent_output.infected_when;
-    let initial_active_susceptible_seq_s = &assembled_agent_output.initial_active_susceptible;
-    let initial_vaccinated_seq_s = &assembled_agent_output.initial_vaccinated;
-    let removed_when_seq_s = &assembled_agent_output.removed_when;
-    let vaccinated_when_seq_s = &assembled_agent_output.vaccinated_when;
-    let zealots_seq_s = &assembled_agent_output.zealots;
+    let convinced_when_seq_s = &assembled_agent_output.convinced_when.unwrap();
+    let degree_seq_s = &assembled_agent_output.degree.unwrap();
+    let final_active_seq_s = &assembled_agent_output.final_active_susceptible.unwrap();
+    let final_prevalence_seq_s = &assembled_agent_output.final_prevalence.unwrap();
+    let final_vaccinated_seq_s = &assembled_agent_output.final_vaccinated.unwrap();
+    let infected_when_seq_s = &assembled_agent_output.infected_when.unwrap();
+    let initial_active_susceptible_seq_s = &assembled_agent_output.initial_active_susceptible.unwrap();
+    let initial_vaccinated_seq_s = &assembled_agent_output.initial_vaccinated.unwrap();
+    let removed_when_seq_s = &assembled_agent_output.removed_when.unwrap();
+    let vaccinated_when_seq_s = &assembled_agent_output.vaccinated_when.unwrap();
+    let zealots_seq_s = &assembled_agent_output.zealots.unwrap();
 
     let frac_final_active = compute_fractions(final_active_seq_s, degree_seq_s);
     let frac_final_prevalence = compute_fractions(final_prevalence_seq_s, degree_seq_s);
@@ -3116,17 +3273,17 @@ fn compute_agent_sim_distribution(
 pub fn compute_agent_stats(
     assembled_agent_output: &AssembledAgentOutput,
 ) -> AgentStatPacker {
-    let convinced_when_seq_s = &assembled_agent_output.convinced_when;
-    let degree_seq_s = &assembled_agent_output.degree;
-    let final_active_seq_s = &assembled_agent_output.final_active_susceptible;
-    let final_prevalence_seq_s = &assembled_agent_output.final_prevalence;
-    let final_vaccinated_seq_s = &assembled_agent_output.final_vaccinated;
-    let infected_when_seq_s = &assembled_agent_output.infected_when;
-    let initial_active_susceptible_seq_s = &assembled_agent_output.initial_active_susceptible;
-    let initial_vaccinated_seq_s = &assembled_agent_output.initial_vaccinated;
-    let removed_when_seq_s = &assembled_agent_output.removed_when;
-    let vaccinated_when_seq_s = &assembled_agent_output.vaccinated_when;
-    let zealots_seq_s = &assembled_agent_output.zealots;
+    let convinced_when_seq_s = &assembled_agent_output.convinced_when.unwrap();
+    let degree_seq_s = &assembled_agent_output.degree.unwrap();
+    let final_active_seq_s = &assembled_agent_output.final_active_susceptible.unwrap();
+    let final_prevalence_seq_s = &assembled_agent_output.final_prevalence.unwrap();
+    let final_vaccinated_seq_s = &assembled_agent_output.final_vaccinated.unwrap();
+    let infected_when_seq_s = &assembled_agent_output.infected_when.unwrap();
+    let initial_active_susceptible_seq_s = &assembled_agent_output.initial_active_susceptible.unwrap();
+    let initial_vaccinated_seq_s = &assembled_agent_output.initial_vaccinated.unwrap();
+    let removed_when_seq_s = &assembled_agent_output.removed_when.unwrap();
+    let vaccinated_when_seq_s = &assembled_agent_output.vaccinated_when.unwrap();
+    let zealots_seq_s = &assembled_agent_output.zealots.unwrap();
 
     let frac_final_active = compute_fractions(final_active_seq_s, degree_seq_s);
     let frac_final_prevalence = compute_fractions(final_prevalence_seq_s, degree_seq_s);

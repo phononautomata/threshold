@@ -12,7 +12,7 @@ pub const CONST_ZEALOT_THRESHOLD: f64 = 1.00000001;
 
 pub const EXTENSION_CONFIG: &str = ".json";
 pub const EXTENSION_DATA: &str = ".json";
-pub const EXTENSION_RESULTS: &str = ".pickle";
+pub const EXTENSION_RESULTS: &str = ".json";
 
 pub const FLAG_VERBOSE: bool = false;
 
@@ -27,7 +27,10 @@ pub const FILENAME_DATA_VACCINATION_ATTITUDE: &str = "vaccination_attitude_data"
 
 pub const FOLDER_CONFIG: &str = "config";
 pub const FOLDER_DATA: &str = "data";
+pub const FOLDER_DATA_CUR: &str = "data/curated";
+pub const FOLDER_DATA_RAW: &str = "data/raw";
 pub const FOLDER_RESULTS: &str = "results";
+pub const FOLDER_RESULTS_TEMP: &str = "results/temp";
 
 pub const HEADER_AGE: &str = "age_";
 pub const HEADER_AGENT: &str = "agent_";

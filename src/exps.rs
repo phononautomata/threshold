@@ -1,11 +1,23 @@
+use std::env;
+use std::fmt::format;
+use std::path::PathBuf;
+
 use clap::Parser;
 
-use crate::agent::{AgentEnsemble, HesitancyAttributionModel, OpinionModel, SeedModel, VaccinationPolicy};
-use crate::cons::{FILENAME_CONFIG, FILENAME_DATA_CONTACT_MATRIX, FILENAME_DATA_POPULATION_AGE, FILENAME_DATA_VACCINATION_ATTITUDE, FOLDER_CONFIG};
-use crate::utils::{
-    build_normalized_cdf, compute_interlayer_probability_matrix, compute_intralayer_average_degree, count_underaged, load_json_config, read_key_and_matrixf64_from_json, read_key_and_vecf64_from_json, AlgorithmPars, EpidemicPars, Input, OpinionPars, OutputEnsemble, OutputPars, USState, VaccinationPars
+use crate::agent::{
+    AgentEnsemble, HesitancyAttributionModel, OpinionModel, SeedModel, 
+    VaccinationPolicy,
 };
-use crate::core::watts_sir_coupled_model_multilayer;
+use crate::cons::{
+    EXTENSION_RESULTS, FILENAME_CONFIG, FILENAME_DATA_CONTACT_MATRIX, 
+    FILENAME_DATA_POPULATION_AGE, FILENAME_DATA_VACCINATION_ATTITUDE, 
+    FOLDER_CONFIG, FOLDER_RESULTS, HEADER_PROJECT,
+};
+use crate::core::dynamical_loop;
+use crate::utils::{
+    build_normalized_cdf, compute_interlayer_probability_matrix, compute_intralayer_average_degree, count_underaged, create_output_files, load_json_config, measure_attitude_clusters, measure_cascading_clusters, measure_neighborhood, read_key_and_matrixf64_from_json, read_key_and_vecf64_from_json, write_file_name_base, AlgorithmPars, ClusterOutput, EpidemicPars, Input, OpinionPars, OutputEnsemble, OutputPars, USState, VaccinationPars
+};
+
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -22,6 +34,8 @@ pub struct Args {
     pub agent_raw_flag: bool,
     #[clap(long, value_parser, default_value_t = true)]
     pub attitude_flag: bool,
+    #[clap(long, value_parser, default_value_t = 18)]
+    pub batch_size: usize,
     #[clap(long, value_parser, default_value_t = false)]
     pub cluster_flag: bool,
     #[clap(long, value_parser, default_value_t = false)]
@@ -121,6 +135,7 @@ pub fn run_full(args: Args) {
             let size = args.network_size;
 
             let apars = AlgorithmPars::new(
+                args.batch_size,
                 args.experiment_id,
                 args.nsims_dyn, 
                 args.nsims_net, 
@@ -205,7 +220,15 @@ pub fn run_full(args: Args) {
         pars.opinion.as_mut().unwrap().zealot_fraction = pars.opinion.unwrap().zealot_fraction;
     }
 
+    let file_name_base = write_file_name_base(&pars);  
+    let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
+    path.push(FOLDER_RESULTS);
+    path.push(format!("{}{}{}", HEADER_PROJECT, file_name_base, EXTENSION_RESULTS));
+    let output_file_map = create_output_files(file_name_base, pars.output.unwrap());
+
     let mut output_ensemble = OutputEnsemble::new();
+
+    let mut batch_counter = 0;
 
     for nsn in 0..pars.algorithm.unwrap().nsims_net {
         println!("Network realization={nsn}");
@@ -231,12 +254,49 @@ pub fn run_full(args: Args) {
             pars.vaccination.unwrap().vaccination_quota,
         );
 
-        watts_sir_coupled_model_multilayer(
-            &mut pars,
-            &mut agent_ensemble, 
-            &mut output_ensemble,
-        );
+        for nsd in 0..pars.algorithm.unwrap().nsims_dyn {
+            println!("Dynamical realization={nsd}");
+    
+            agent_ensemble.introduce_vaccination_attitudes(&pars.vaccination.unwrap());
+    
+            agent_ensemble.introduce_infections_dd(pars.epidemic.seed_model, pars.epidemic.nseeds);
+    
+            if pars.output.unwrap().agent {
+                for agent_id in 0..agent_ensemble.number_of_agents() {
+                    measure_neighborhood(agent_id, &mut agent_ensemble, 0);
+                }
+            }
+    
+            let cluster_output = if pars.output.unwrap().cluster {
+                let attitude_cluster = measure_attitude_clusters(&mut agent_ensemble);
+                agent_ensemble.cascading_threshold();
+                let cascading_cluster = measure_cascading_clusters(&mut agent_ensemble);
+                Some(ClusterOutput::new(Some(attitude_cluster), Some(cascading_cluster), None))
+            } else {
+                None
+            };
+        
+            let mut output = dynamical_loop(&mut agent_ensemble, &pars);
+    
+            if pars.output.unwrap().cluster {
+                output.cluster = cluster_output;
+            }
+    
+            output_ensemble.add_outbreak(output, pars.size, pars.epidemic.r0);
+
+            batch_counter += 1;
+            if batch_counter >= pars.algorithm.unwrap().batch_size {
+                save_batch_to_json(&output_file_map, &output_ensemble);
+                output_ensemble.clear();
+                batch_counter = 0;
+            } 
+
+            agent_ensemble.clear_epidemic_consequences();
+        }
     }
 
-    output_ensemble.save_to_pickle(&pars);
+    if batch_counter > 0 {
+        save_batch_to_json(&output_file_map, &output_ensemble);
+        output_ensemble.clear();
+    }
 }

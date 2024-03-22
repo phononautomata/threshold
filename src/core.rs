@@ -12,7 +12,7 @@ use crate::{
     } 
 };
 
-fn dynamical_loop(
+pub fn dynamical_loop(
     agent_ensemble: &mut AgentEnsemble, 
     pars: &Input,
 ) -> OutputResults {
@@ -24,7 +24,7 @@ fn dynamical_loop(
         let mut ar_list = agent_ensemble.gather_active_removed();
         let mut av_list = agent_ensemble.gather_active_vaccinated();
         let hv_list = agent_ensemble.gather_hesitant_vaccinated();
-        
+
         let sus_den_0 = (hs_list.len() + as_list.len()) as f64 / agent_ensemble.number_of_agents() as f64;
 
         let mut pop_tseries = TimeOutput::new();

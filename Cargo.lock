@@ -3,26 +3,6 @@
 version = 3
 
 [[package]]
-name = "GSL"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9becaf6d7d1ba36a457288e661fa6a0472e8328629276f45369eafcd48ef1ce"
-dependencies = [
- "GSL-sys",
- "paste",
-]
-
-[[package]]
-name = "GSL-sys"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4577670dcc0720995dc39f04c438595eaae8ccc27f4aafd3e572dd408d01bd9d"
-dependencies = [
- "libc",
- "pkg-config",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -295,20 +275,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 
 [[package]]
-name = "netrust"
-version = "0.1.0"
-dependencies = [
- "GSL",
- "clap",
- "rand",
- "rand_distr",
- "serde 1.0.152",
- "serde-pickle",
- "strum",
- "strum_macros",
-]
-
-[[package]]
 name = "nom"
 version = "5.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -434,12 +400,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b7820b9daea5457c9f21c69448905d723fbd21136ccf521748f23fd49e723ee"
 
 [[package]]
-name = "paste"
-version = "1.0.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d01a5bd0424d00070b0098dd17ebca6f961a959dead1dbcbbbc1d1cd8d3deeba"
-
-[[package]]
 name = "peroxide"
 version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -462,12 +422,6 @@ dependencies = [
  "quote",
  "syn 1.0.109",
 ]
-
-[[package]]
-name = "pkg-config"
-version = "0.3.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ac9a59f73473f1b8d852421e59e64809f025994837ef743615c6d0c5b305160"
 
 [[package]]
 name = "ppv-lite86"
@@ -776,7 +730,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "config",
- "netrust",
  "rand",
  "rand_distr",
  "rv",

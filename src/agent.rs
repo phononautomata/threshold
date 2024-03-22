@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use netrust::network::Network;
 use rand::Rng;
 use rand::{distributions::WeightedIndex, prelude::*};
 use rv::traits::Rv;
@@ -330,11 +329,6 @@ impl Agent {
             self.zealots = Some(zealots);
             self.final_prevalence = Some(prevalence);
         }
-    }
-
-    fn neighbors(&mut self, graph: &Network) {
-        self.neighbors = graph.inner()[self.id].neighbors.clone();
-        self.degree = self.neighbors.len();
     }
 
     fn number_of_neighbors(&self) -> usize {
@@ -899,12 +893,6 @@ impl AgentEnsemble {
         //    }
         //}
         //println!("Number of unequalized agents is {}", unequalized_agents);
-    }
-
-    pub fn neighbors(&mut self, graph: &Network) {
-        for agent in self.inner_mut() {
-            agent.neighbors(graph);
-        }
     }
 
     pub fn introduce_infections(&mut self, model: SeedModel, nseeds: usize) {

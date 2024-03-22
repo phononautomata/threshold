@@ -17,21 +17,10 @@
         "vaccination_decay": 0.0,
         "vaccination_rate": 0.0
     },
-    "network": {
-        "attachment": 5,
-        "average_degree": 10,
-        "connection_probability": 1.0,
-        "initial_cluster_size": 2,
-        "maximum_degree": 19999,
-        "minimum_degree": 0,
-        "model": "erdos-renyi",
-        "size": 30000,
-        "powerlaw_exponent": 1.0,
-        "rewiring_probability": 1.0
-    },
     "opinion": {
         "active_fraction": 0.15,
         "attitude_attribution_model": "random",
+        "model": "homogeneous",
         "threshold": 0.2,
         "zealot_fraction": 0.0
     },
@@ -49,6 +38,7 @@
         "time": false,
         "time_raw": false
     },
+    "size": 50000,
     "vaccination": {
         "age_threshold": 18,
         "already": 0.0,

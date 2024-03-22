@@ -1,16 +1,11 @@
 use clap::Parser;
 
-use crate::agent::{AgentEnsemble, HesitancyAttributionModel, SeedModel, VaccinationPolicy};
+use crate::agent::{AgentEnsemble, HesitancyAttributionModel, OpinionModel, SeedModel, VaccinationPolicy};
 use crate::cons::{FILENAME_CONFIG, FILENAME_DATA_CONTACT_MATRIX, FILENAME_DATA_POPULATION_AGE, FILENAME_DATA_VACCINATION_ATTITUDE, FOLDER_CONFIG};
 use crate::utils::{
     build_normalized_cdf, compute_interlayer_probability_matrix, compute_intralayer_average_degree, count_underaged, load_json_config, read_key_and_matrixf64_from_json, read_key_and_vecf64_from_json, AlgorithmPars, EpidemicPars, Input, OpinionPars, OutputEnsemble, OutputPars, USState, VaccinationPars
 };
 use crate::core::watts_sir_coupled_model_multilayer;
-
-use netrust::utils::{
-    NetworkModel, 
-    NetworkPars,
-};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -27,8 +22,6 @@ pub struct Args {
     pub agent_raw_flag: bool,
     #[clap(long, value_parser, default_value_t = true)]
     pub attitude_flag: bool,
-    #[clap(long, value_parser, default_value_t = 10)]
-    pub average_degree: usize,
     #[clap(long, value_parser, default_value_t = false)]
     pub cluster_flag: bool,
     #[clap(long, value_parser, default_value_t = false)]
@@ -49,12 +42,6 @@ pub struct Args {
     pub infection_rate: f64,
     #[clap(long, value_parser, default_value_t = 0.2)]
     pub infection_decay: f64,
-    #[clap(long, value_parser, default_value_t = 0)]
-    pub maximum_degree: usize,
-    #[clap(long, value_parser, default_value_t = 0)]
-    pub minimum_degree: usize,
-    #[clap(long, value_parser, default_value = "erdos-renyi")]
-    pub network_model: NetworkModel,
     #[clap(long, value_parser, default_value_t = 100000)]
     pub network_size: usize,
     #[clap(long, value_parser, default_value_t = 10)]
@@ -63,8 +50,8 @@ pub struct Args {
     pub nsims_net: usize,
     #[clap(long, value_parser, default_value_t = 20)]
     pub nseeds: usize,
-    #[clap(long, value_parser, default_value_t = 1.0)]
-    pub powerlaw_exponent: f64,
+    #[clap(long, value_parser, default_value = "homogeneous")]
+    pub opinion_model: OpinionModel,
     #[clap(long, value_parser, default_value_t = true)]
     pub rebuild_flag: bool,
     #[clap(long, value_parser, default_value_t = false)]
@@ -73,10 +60,6 @@ pub struct Args {
     pub rewiring_probability: f64,
     #[clap(long, value_parser, default_value_t = 1.5)]
     pub r0: f64,
-    #[clap(long, value_parser, default_value_t = 0.0)]
-    pub r0_w2: f64,
-    #[clap(long, value_parser, default_value_t = false)]
-    pub secondary_outbreak: bool,
     #[clap(long, value_parser, default_value = "top-degree-neighborhood")]
     pub seed_model: SeedModel,
     #[clap(long, value_parser, default_value_t = 500)]
@@ -103,11 +86,11 @@ pub struct Args {
     pub zealot_fraction: f64,
 }
 
-pub fn build_multilayer(args: Args) {
+pub fn build_multilayer(_args: Args) {
     todo!()
 }
 
-pub fn run_epidemic(args: Args) {
+pub fn run_epidemic(_args: Args) {
     todo!()
 }
 
@@ -117,6 +100,7 @@ pub fn run_full(args: Args) {
             let opars = OpinionPars::new(
                 args.active_fraction, 
                 Some(args.hesitancy_attribution_model),
+                args.opinion_model,
                 args.threshold, 
                 args.zealot_fraction,
             );
@@ -134,18 +118,7 @@ pub fn run_full(args: Args) {
                 args.vaccination_rate,
             );
 
-            let npars = NetworkPars {
-                attachment: None,
-                average_degree: Some(0),
-                connection_probability: None,
-                initial_cluster_size: None,
-                maximum_degree: None,
-                minimum_degree: None,
-                model: args.network_model,
-                powerlaw_exponent: None,
-                rewiring_probability: None,
-                size: args.network_size,
-            };
+            let size = args.network_size;
 
             let apars = AlgorithmPars::new(
                 args.experiment_id,
@@ -185,18 +158,12 @@ pub fn run_full(args: Args) {
                 args.vaccination_rate,
             );
 
-           Input::new(Some(apars), epars, Some(npars), Some(opars), Some(oflags), Some(vpars))
+           Input::new(Some(apars), epars, Some(opars), Some(oflags), size, Some(vpars))
         },
         true => {
             load_json_config(FILENAME_CONFIG, Some(FOLDER_CONFIG)).unwrap()
         },
     };
-
-    let dd_vac_filename = FILENAME_DATA_VACCINATION_ATTITUDE;
-    let fractions: Vec<f64> = read_key_and_vecf64_from_json(
-        pars.vaccination.unwrap().us_state.unwrap(), 
-        dd_vac_filename,
-    );
 
     let popultion_filename = FILENAME_DATA_POPULATION_AGE;
     let mut population_vector: Vec<f64> = read_key_and_vecf64_from_json(pars.vaccination.unwrap().us_state.unwrap(), popultion_filename);
@@ -216,22 +183,34 @@ pub fn run_full(args: Args) {
         1.0
     };
 
-    pars.vaccination.as_mut().unwrap().already = eligible_fraction * fractions[0];
-    pars.vaccination.as_mut().unwrap().soon = eligible_fraction * fractions[1];
-    pars.vaccination.as_mut().unwrap().someone = eligible_fraction * fractions[2];
-    pars.vaccination.as_mut().unwrap().majority = eligible_fraction * fractions[3];
-    pars.vaccination.as_mut().unwrap().never = eligible_fraction * fractions[4];
+    if pars.opinion.unwrap().model == OpinionModel::DataDrivenThresholds {
+        let dd_vac_filename = FILENAME_DATA_VACCINATION_ATTITUDE;
+        let fractions: Vec<f64> = read_key_and_vecf64_from_json(
+            pars.vaccination.unwrap().us_state.unwrap(), 
+            dd_vac_filename,
+        );
 
-    pars.opinion.as_mut().unwrap().active_fraction = pars.vaccination.unwrap().already + pars.vaccination.unwrap().soon;
-    pars.opinion.as_mut().unwrap().threshold = 0.0;
-    pars.opinion.as_mut().unwrap().zealot_fraction = pars.vaccination.unwrap().never;
+        pars.vaccination.as_mut().unwrap().already = eligible_fraction * fractions[0];
+        pars.vaccination.as_mut().unwrap().soon = eligible_fraction * fractions[1];
+        pars.vaccination.as_mut().unwrap().someone = eligible_fraction * fractions[2];
+        pars.vaccination.as_mut().unwrap().majority = eligible_fraction * fractions[3];
+        pars.vaccination.as_mut().unwrap().never = eligible_fraction * fractions[4];
+
+        pars.opinion.as_mut().unwrap().active_fraction = pars.vaccination.unwrap().already + pars.vaccination.unwrap().soon;
+        pars.opinion.as_mut().unwrap().threshold = 0.0;
+        pars.opinion.as_mut().unwrap().zealot_fraction = pars.vaccination.unwrap().never;
+    } else {
+        pars.opinion.as_mut().unwrap().active_fraction = pars.opinion.unwrap().active_fraction;
+        pars.opinion.as_mut().unwrap().threshold = pars.opinion.unwrap().threshold;
+        pars.opinion.as_mut().unwrap().zealot_fraction = pars.opinion.unwrap().zealot_fraction;
+    }
 
     let mut output_ensemble = OutputEnsemble::new();
 
     for nsn in 0..pars.algorithm.unwrap().nsims_net {
         println!("Network realization={nsn}");
 
-        let mut agent_ensemble = AgentEnsemble::new(pars.network.unwrap().size);
+        let mut agent_ensemble = AgentEnsemble::new(pars.size);
 
         agent_ensemble.sample_age(&population_cdf);
 

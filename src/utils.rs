@@ -10,10 +10,18 @@ use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use strum::Display;
 
-use netrust::network::Network;
-use netrust::utils::{NetworkPars, NetworkModel};
-use crate::agent::{AgentEnsemble, Attitude, HesitancyAttributionModel, SeedModel, Status, VaccinationPolicy};
-use crate::cons::{CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS, FOLDER_RESULTS, HEADER_AGE, HEADER_AGENT, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_ATTITUDE, HEADER_CLUSTER, HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_GLOBAL, HEADER_PROJECT, HEADER_REBUILD, HEADER_REBUILD_STATS, HEADER_TIME, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE, PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF};
+use crate::agent::{
+    AgentEnsemble, Attitude, HesitancyAttributionModel, OpinionModel, SeedModel, Status, VaccinationPolicy
+};
+use crate::cons::{
+    CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS, FOLDER_RESULTS, HEADER_AGE, 
+    HEADER_AGENT, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, 
+    HEADER_ATTITUDE, HEADER_CLUSTER, HEADER_CLUSTER_DISTRIBUTION, 
+    HEADER_CLUSTER_STATS, HEADER_GLOBAL, HEADER_PROJECT, HEADER_REBUILD, 
+    HEADER_REBUILD_STATS, HEADER_TIME, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE, 
+    PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, 
+    PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF,
+};
 
 pub fn build_normalized_cdf(values: &mut [f64]) -> Vec<f64> {
     let sum: f64 = values.iter().sum();
@@ -34,7 +42,9 @@ pub fn build_normalized_cdf(values: &mut [f64]) -> Vec<f64> {
     cdf
 }
 
-pub fn build_normalized_layered_cdf(values: &mut Vec<Vec<f64>>) -> Vec<Vec<f64>> {
+pub fn build_normalized_layered_cdf(
+    values: &mut Vec<Vec<f64>>,
+) -> Vec<Vec<f64>> {
     values.iter_mut().map(|layer| {
         // Calculate the sum of the current layer
         let sum: f64 = layer.iter().sum();
@@ -59,41 +69,6 @@ pub fn build_normalized_layered_cdf(values: &mut Vec<Vec<f64>>) -> Vec<Vec<f64>>
     }).collect()
 }
 
-pub fn compute_beta_from_r0(
-    r0: f64, 
-    removal_rate: f64, 
-    npars: &NetworkPars, 
-    graph: &Network,
-) -> f64 {
-    match npars.model {
-        NetworkModel::BarabasiAlbert => {
-            let k_avg = graph.average_degree();
-            //let k2_avg = graph.second_moment();
-            r0 * removal_rate / k_avg // (k2_avg - k_avg))
-        },
-        NetworkModel::Complete => {
-            r0 * removal_rate / (npars.size - 1) as f64
-        },
-        NetworkModel::ErdosRenyi => {
-            let k_avg = graph.average_degree();
-            r0 * removal_rate / k_avg
-        },
-        NetworkModel::Regular => {
-            let k_avg = graph.average_degree();
-            r0 * removal_rate / k_avg
-        },
-        NetworkModel::ScaleFree => {
-            let k_avg = graph.average_degree();
-            //let k2_avg = graph.second_moment();
-            r0 * removal_rate / k_avg // (k2_avg - k_avg))
-        },
-        NetworkModel::WattsStrogatz => {
-            let k_avg = graph.average_degree();
-            r0 * removal_rate / k_avg
-        },
-    }
-}
-
 pub fn compute_interlayer_probability_matrix(
     contact_matrix: &Vec<Vec<f64>>
 ) -> Vec<Vec<f64>> {
@@ -107,7 +82,9 @@ pub fn compute_interlayer_probability_matrix(
      probabilities
 }
 
-pub fn compute_intralayer_average_degree(contact_matrix: &Vec<Vec<f64>>) -> Vec<f64> {
+pub fn compute_intralayer_average_degree(
+    contact_matrix: &Vec<Vec<f64>>,
+) -> Vec<f64> {
     let mut intralayer_average_degree = vec![0.0; contact_matrix.len()];
 
     for (alpha, row) in contact_matrix.into_iter().enumerate()  {
@@ -200,7 +177,327 @@ pub fn load_json_data(filename: &str) -> HashMap<String, Value> {
     data
 }
 
-pub fn read_key_and_f64_from_json(state: USState, filename: &str) -> f64 {
+pub fn measure_attitude_clusters(
+    agent_ensemble: &AgentEnsemble,
+) -> ClusterAttitudeOutput {
+    let mut already_clusters = Vec::new();
+    let mut soon_clusters = Vec::new();
+    let mut someone_clusters = Vec::new();
+    let mut majority_clusters = Vec::new();
+    let mut never_clusters = Vec::new();
+ 
+    // Initialize visited array and stack
+    let nagents = agent_ensemble.number_of_agents();
+    let mut clustered = vec![false; nagents];
+    let mut stack = Vec::new();
+
+    // DFS algorithm for building cluster distribution
+    for a in 0..nagents {
+        if !clustered[a] {
+            // Initialize new cluster
+            let mut cluster = Vec::new();
+            stack.push(a);
+            clustered[a] = true;
+
+            // Get attitude & threshold for departing node
+            let a_attitude = agent_ensemble.inner()[a].attitude;
+            let a_threshold = agent_ensemble.inner()[a].threshold;
+
+            // Check for zealots
+            if a_threshold > 1.0 {
+                // DFS
+                while let Some(u) = stack.pop() {
+                    // Add u to the current cluster
+                    cluster.push(u);
+                    clustered[u] = true;
+
+                    // Add unvisited neighbors with matching status or threshold to stack
+                    for v in agent_ensemble.inner()[u].neighbors.clone() {
+                        if !clustered[v] {
+                            let v_threshold = agent_ensemble.inner()[v].threshold;
+                            if v_threshold > 1.0 && a_threshold > 1.0 {
+                                stack.push(v);
+                                clustered[v] = true;
+                            }
+                        }
+                    }
+                }
+
+                // Add cluster to corresponding vector
+                never_clusters.push(cluster.len());  
+
+            } else {
+                // DFS
+                while let Some(u) = stack.pop() {
+                    // Add u to the current cluster
+                    cluster.push(u);
+                    clustered[u] = true;
+
+                    // Add unvisited neighbors with matching status or threshold to stack
+                    for v in agent_ensemble.inner()[u].neighbors.clone() {
+                        if !clustered[v] {
+                            let v_status = agent_ensemble.inner()[v].attitude;
+                            let v_threshold = agent_ensemble.inner()[v].threshold;
+                            if v_status == a_attitude && (v_threshold < 1.0) {
+                                stack.push(v);
+                                clustered[v] = true;
+                            }
+                        }
+                    }
+                }
+                // Add cluster to corresponding vector
+                match a_attitude.unwrap() {
+                    Attitude::Vaccinated => already_clusters.push(cluster.len()),
+                    Attitude::Soon => soon_clusters.push(cluster.len()),
+                    Attitude::Someone => someone_clusters.push(cluster.len()),
+                    Attitude::Most => majority_clusters.push(cluster.len()),
+                    Attitude::Never => never_clusters.push(cluster.len()),
+                }
+            }
+        }
+    }
+
+    ClusterAttitudeOutput::new(
+        already_clusters, 
+        soon_clusters, 
+        someone_clusters, 
+        majority_clusters, 
+        never_clusters,
+    )
+}
+
+pub fn measure_cascading_clusters(
+    agent_ensemble: &mut AgentEnsemble,
+) -> ClusterCascadingOutput {
+    let mut cascading_clusters = Vec::new();
+    let mut nonzealot_clusters = Vec::new();
+ 
+    // Initialize visited array and stack
+    let nagents = agent_ensemble.number_of_agents();
+    let mut ca_clustered = vec![false; nagents];
+    let mut ca_stack = Vec::new();
+    let mut nz_clustered = vec![false; nagents];
+    let mut nz_stack = Vec::new();
+
+    for a in 0..nagents {
+        if !ca_clustered[a] {
+            // Initialize new cluster
+            let mut cluster = Vec::new();
+            ca_stack.push(a);
+            ca_clustered[a] = true;
+
+            let a_threshold = agent_ensemble.inner()[a].threshold;
+            let a_cascading_threshold = agent_ensemble.inner()[a].cascading_threshold.unwrap();
+
+            // Check for zealots
+            if a_threshold < 1.0 {
+                // DFS
+                while let Some(u) = ca_stack.pop() {
+                    // Add u to the current cluster
+                    cluster.push(u);
+                    ca_clustered[u] = true;
+
+                    // Add unvisited neighbors with matching status or threshold to stack
+                    for v in agent_ensemble.inner()[u].neighbors.clone() {
+                        if !ca_clustered[v] {
+                            let v_cascading_threshold = agent_ensemble.inner()[v].cascading_threshold.unwrap();
+                            if v_cascading_threshold == a_cascading_threshold && a_cascading_threshold == 0 {
+                                ca_stack.push(v);
+                                ca_clustered[v] = true;
+                            }
+                        }
+                    }
+                }
+
+                // Add cluster to corresponding vector
+                cascading_clusters.push(cluster.len()); 
+            }
+        }
+
+        if !nz_clustered[a] {
+            // Initialize new cluster
+            let mut cluster = Vec::new();
+            nz_stack.push(a);
+            nz_clustered[a] = true;
+
+            let a_threshold = agent_ensemble.inner()[a].threshold;
+
+            // Check for zealots
+            if a_threshold < 1.0 {
+                // DFS
+                while let Some(u) = ca_stack.pop() {
+                    // Add u to the current cluster
+                    cluster.push(u);
+                    nz_clustered[u] = true;
+
+                    // Add unvisited neighbors with matching status or threshold to stack
+                    for v in agent_ensemble.inner()[u].neighbors.clone() {
+                        if !nz_clustered[v] {
+                            let v_threshold = agent_ensemble.inner()[v].threshold;
+                            if v_threshold < 1.0 && a_threshold < 1.0 {
+                                nz_stack.push(v);
+                                nz_clustered[v] = true;
+                            }
+                        }
+                    }
+                }
+
+                // Add cluster to corresponding vector
+                nonzealot_clusters.push(cluster.len()); 
+            }
+        }
+    }
+
+    ClusterCascadingOutput::new(
+        cascading_clusters, 
+        nonzealot_clusters, 
+    )
+}
+
+pub fn measure_opinion_health_clusters(
+    agent_ensemble: &AgentEnsemble,
+) -> ClusterOpinionHealthOutput {
+    let mut as_clusters = Vec::new();
+    let mut hs_clusters = Vec::new();
+    let mut ai_clusters = Vec::new();
+    let mut hi_clusters = Vec::new();
+    let mut ar_clusters = Vec::new();
+    let mut hr_clusters = Vec::new();
+    let mut av_clusters = Vec::new();
+    let mut hv_clusters = Vec::new();
+    let mut ze_clusters = Vec::new();
+    
+    // Initialize visited array and stack
+    let nagents = agent_ensemble.number_of_agents();
+    let mut clustered = vec![false; nagents];
+    let mut stack = Vec::new();
+
+    // DFS algorithm for building cluster distribution
+    for a in 0..nagents {
+        if !clustered[a] {
+            // Initialize new cluster
+            let mut cluster = Vec::new();
+            stack.push(a);
+            clustered[a] = true;
+
+            // Get status & threshold for departing node
+            let a_status = agent_ensemble.inner()[a].status;
+            let a_threshold = agent_ensemble.inner()[a].threshold;
+
+            // Check for zealots
+            if a_threshold > 1.0 {
+                // DFS
+                while let Some(u) = stack.pop() {
+                    // Add u to the current cluster
+                    cluster.push(u);
+                    clustered[u] = true;
+
+                    // Add unvisited neighbors with matching status or threshold to stack
+                    for v in agent_ensemble.inner()[u].neighbors.clone() {
+                        if !clustered[v] {
+                            let v_threshold = agent_ensemble.inner()[v].threshold;
+                            if v_threshold > 1.0 && a_threshold > 1.0 {
+                                stack.push(v);
+                                clustered[v] = true;
+                            }
+                        }
+                    }
+                }
+
+                // Add cluster to corresponding vector
+                ze_clusters.push(cluster.len());  
+
+            } else {
+                // DFS
+                while let Some(u) = stack.pop() {
+                    // Add u to the current cluster
+                    cluster.push(u);
+                    clustered[u] = true;
+
+                    // Add unvisited neighbors with matching status or threshold to stack
+                    for v in agent_ensemble.inner()[u].neighbors.clone() {
+                        if !clustered[v] {
+                            let v_status = agent_ensemble.inner()[v].status;
+                            let v_threshold = agent_ensemble.inner()[v].threshold;
+                            if v_status == a_status && (v_threshold < 1.0) {
+                                stack.push(v);
+                                clustered[v] = true;
+                            }
+                        }
+                    }
+                }
+                // Add cluster to corresponding vector
+                match a_status {
+                    Status::ActSus => as_clusters.push(cluster.len()),
+                    Status::HesSus => hs_clusters.push(cluster.len()),
+                    Status::ActInf => ai_clusters.push(cluster.len()),
+                    Status::HesInf => hi_clusters.push(cluster.len()),
+                    Status::ActRem => ar_clusters.push(cluster.len()),
+                    Status::HesRem => hr_clusters.push(cluster.len()),
+                    Status::ActVac => av_clusters.push(cluster.len()),
+                    Status::HesVac => hv_clusters.push(cluster.len()),
+                }
+            }
+        }
+    }
+
+    ClusterOpinionHealthOutput::new(
+            ai_clusters,
+            as_clusters, 
+            ar_clusters, 
+            av_clusters,
+            hi_clusters, 
+            hr_clusters,
+            hs_clusters,
+            hv_clusters,
+            ze_clusters,
+        )
+}
+
+pub fn measure_neighborhood(
+    agent_id: usize, 
+    agent_ensemble: &mut AgentEnsemble, 
+    t: usize,
+) {
+    let neighbors = agent_ensemble.inner_mut()[agent_id].neighbors.clone();
+    let mut active_susceptible = 0;
+    let mut vaccinated = 0;
+    let mut zealots = 0;
+    let mut prevalence = 0;
+    for neigh in neighbors {
+        let status = agent_ensemble.inner()[neigh].status;
+        let threshold = agent_ensemble.inner()[neigh].threshold;
+        if threshold >= 1.0 {
+            zealots += 1;
+        } else {
+            if status == Status::ActSus {
+                active_susceptible += 1;
+            } else if status == Status::ActVac {
+                vaccinated += 1;
+            } else if status == Status::ActRem {
+                prevalence += 1;
+            } else if status == Status::HesRem {
+                prevalence += 1;
+            }
+        }
+    }
+
+    if t == 0 {
+        agent_ensemble.inner_mut()[agent_id].initial_active_susceptible = Some(active_susceptible);
+        agent_ensemble.inner_mut()[agent_id].initial_vaccinated = Some(vaccinated);
+        agent_ensemble.inner_mut()[agent_id].zealots = Some(zealots);
+    } else {
+        agent_ensemble.inner_mut()[agent_id].final_active_susceptible = Some(active_susceptible);
+        agent_ensemble.inner_mut()[agent_id].final_vaccinated = Some(vaccinated);
+        agent_ensemble.inner_mut()[agent_id].zealots = Some(zealots);
+        agent_ensemble.inner_mut()[agent_id].final_prevalence = Some(prevalence);
+    }
+}
+
+pub fn read_key_and_f64_from_json(
+    state: USState, 
+    filename: &str,
+) -> f64 {
     let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
     path.push("data");
     path.push(format!("{}.json", filename));
@@ -278,37 +575,6 @@ pub fn sample_from_cdf(cdf: &[f64]) -> usize {
     cdf.iter().position(|&value| value >= u).unwrap_or(0)
 }
 
-pub fn select_network_model(
-    net_id: NetworkModel,
-) -> HashMap<String, Value> {
-    match net_id {
-        NetworkModel::BarabasiAlbert => {
-            let filename = "config_network_model_barabasialbert";
-            load_json_data(filename)
-        },
-        NetworkModel::Complete => {
-            let filename = "config_network_model_complete";
-            load_json_data(filename)
-        },
-        NetworkModel::ErdosRenyi => {
-            let filename = "config_network_model_erdosrenyi";
-            load_json_data(filename)
-        },
-        NetworkModel::Regular => {
-            let filename = "config_network_model_regular";
-            load_json_data(filename)
-        },
-        NetworkModel::ScaleFree => {
-            let filename = "config_network_model_scalefree";
-            load_json_data(filename)
-        },
-        NetworkModel::WattsStrogatz => {
-            let filename = "config_network_model_wattsstrogatz";
-            load_json_data(filename)
-        },
-    }
-}
-
 pub fn sir_prevalence(r0: f64, sus0: f64) -> f64 {
     const MAX_ITERATIONS: usize = 10000;
     const TOLERANCE: f64 = 1e-6;
@@ -349,14 +615,9 @@ fn write_epidemic_string(epars: &EpidemicPars) -> String {
 pub fn write_file_name(
     pars: &Input, 
     exp_id: String,
-    ml_flag: bool,
 ) -> String {
     let head = HEADER_PROJECT.to_string();
-    let npars_chain = if ml_flag {
-        write_multilayer_string(&pars.network.unwrap())
-    } else {
-        write_network_string(&pars.network.unwrap())
-    };
+    let npars_chain = write_multilayer_string(pars.size);
     let opars_chain = write_opinion_string(&pars.opinion.unwrap());
     let epars_chain = write_epidemic_string(&pars.epidemic);
     let vpars_chain = write_vaccination_string(&pars.vaccination.unwrap());
@@ -364,31 +625,8 @@ pub fn write_file_name(
     head + &exp_id + &npars_chain + &opars_chain + &epars_chain + &vpars_chain + &apars_chain
 }
 
-fn write_multilayer_string(npars: &NetworkPars) -> String {    
-    format!("_nml_n{}", npars.size)
-}
-
-fn write_network_string(npars: &NetworkPars) -> String {    
-    match npars.model {
-        NetworkModel::BarabasiAlbert => {
-            format!("_netba_n{}_k{}", npars.size, npars.average_degree.unwrap())
-        },
-        NetworkModel::Complete => {
-            format!("_netco_n{}", npars.size)
-        },
-        NetworkModel::ErdosRenyi => {
-            format!("_neter_n{}_k{}", npars.size, npars.average_degree.unwrap())
-        },
-        NetworkModel::Regular => {
-            format!("_netre_n{}_k{}", npars.size, npars.average_degree.unwrap())
-        },
-        NetworkModel::ScaleFree => {
-            format!("_netsf_n{}_kmin{}_kmax{}_gamma{}", npars.size, npars.minimum_degree.unwrap(), npars.maximum_degree.unwrap(), npars.powerlaw_exponent.unwrap())
-        },
-        NetworkModel::WattsStrogatz => {
-            format!("_netws_n{}_k{}_p{}", npars.size, npars.average_degree.unwrap(), npars.rewiring_probability.unwrap())
-        },
-    }
+fn write_multilayer_string(size: usize) -> String {    
+    format!("_nml_n{}", size)
 }
 
 fn write_opinion_string(opars: &OpinionPars) -> String {
@@ -1198,9 +1436,9 @@ impl GlobalOutput {
 pub struct Input {
     pub algorithm: Option<AlgorithmPars>,
     pub epidemic: EpidemicPars,
-    pub network: Option<NetworkPars>,
     pub opinion: Option<OpinionPars>,
     pub output: Option<OutputPars>,
+    pub size: usize,
     pub vaccination: Option<VaccinationPars>,
 }
 
@@ -1208,17 +1446,17 @@ impl Input {
     pub fn new(
         algorithm: Option<AlgorithmPars>,
         epidemic: EpidemicPars,
-        network: Option<NetworkPars>,
         opinion: Option<OpinionPars>,
         output: Option<OutputPars>,
+        size: usize,
         vaccination: Option<VaccinationPars>,
     ) -> Self {
         Self {
             algorithm,
             epidemic,
-            network,
             opinion,
             output,
+            size,
             vaccination,
         }
     }
@@ -1229,6 +1467,7 @@ pub struct OpinionPars {
     pub active_fraction: f64,
     pub attitude_attribution_model: Option<HesitancyAttributionModel>,
     pub threshold: f64,
+    pub model: OpinionModel,
     pub zealot_fraction: f64,
 }
 
@@ -1236,6 +1475,7 @@ impl OpinionPars {
     pub fn new(
         active_fraction: f64,
         attitude_attribution_model: Option<HesitancyAttributionModel>,
+        model: OpinionModel,
         threshold: f64,
         zealot_fraction: f64,
     ) -> Self {
@@ -1243,6 +1483,7 @@ impl OpinionPars {
             active_fraction,
             attitude_attribution_model,
             threshold,
+            model,
             zealot_fraction,
         }
     }
@@ -1314,7 +1555,7 @@ impl OutputEnsemble {
     }
 
     pub fn filter_outbreaks(&mut self, input: &Input) {
-        let n = input.network.unwrap().size;
+        let n = input.size;
         let r0 = input.epidemic.r0;
         let cutoff_fraction = PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF;
         let mut s: usize = 0;
@@ -1334,7 +1575,7 @@ impl OutputEnsemble {
         input: &Input,
     ) -> AssembledAgeOutput {
         let nsims = self.number_of_simulations();
-        let nagents = input.network.unwrap().size;
+        let nagents = input.size;
 
         let mut activation_potential = vec![vec![Vec::new(); PAR_AGE_GROUPS]; nsims];
         let mut active = vec![vec![0; PAR_AGE_GROUPS]; nsims];
@@ -1428,7 +1669,7 @@ impl OutputEnsemble {
         input: &Input
     ) -> AssembledAgentOutput {
         let nsims = self.number_of_simulations();
-        let n = input.network.unwrap().size;
+        let n = input.size;
         let mut age = vec![vec![INIT_USIZE; n]; nsims];
         let mut convinced_when = vec![vec![INIT_USIZE; n]; nsims];
         let mut degree = vec![vec![INIT_USIZE; n]; nsims];
@@ -1498,7 +1739,7 @@ impl OutputEnsemble {
         input: &Input,
     ) -> AssembledAttitudeOutput {
         let nsims = self.number_of_simulations();
-        let nagents = input.network.unwrap().size;
+        let nagents = input.size;
 
         let mut activation_potential = vec![vec![Vec::new(); PAR_ATTITUDE_GROUPS]; nsims];
         let mut active = vec![vec![0; PAR_ATTITUDE_GROUPS]; nsims];
@@ -1637,7 +1878,7 @@ impl OutputEnsemble {
         input: &Input,
     ) -> AssembledDegreeOutput {
         let nsims = self.number_of_simulations();
-        let nagents = input.network.unwrap().size;
+        let nagents = input.size;
         let eff_max_degree = (nagents as f64 / 10.0) as usize; 
         
         let mut activation_potential = vec![vec![Vec::new(); eff_max_degree]; nsims];
@@ -1822,7 +2063,7 @@ impl OutputEnsemble {
 
     pub fn rebuild_age_distribution(&mut self, input: &Input) -> Vec<Vec<f64>> {
         let nsims = self.number_of_simulations();
-        let n = input.network.unwrap().size;
+        let n = input.size;
         let mut age_distribution = vec![vec![0.0; PAR_AGE_GROUPS]; nsims];
 
         for s in 0..nsims {
@@ -1837,7 +2078,7 @@ impl OutputEnsemble {
 
     pub fn rebuild_contact_matrix(&mut self, input: &Input) -> Vec<Vec<Vec<f64>>> {
         let nsims = self.number_of_simulations();
-        let n = input.network.unwrap().size;
+        let n = input.size;
         let mut age_distribution = vec![vec![0.0; PAR_AGE_GROUPS]; nsims];
         let mut contact_matrix = vec![vec![vec![0.0; PAR_AGE_GROUPS]; PAR_AGE_GROUPS]; nsims];
     
@@ -1864,7 +2105,7 @@ impl OutputEnsemble {
 
     pub fn rebuild_degree_distribution(&mut self, input: &Input) -> Vec<Vec<f64>> {
         let nsims = self.number_of_simulations();
-        let n = input.network.unwrap().size;
+        let n = input.size;
         //let k_max = n / 100;
         let mut degree_distribution = vec![vec![0.0; PAR_AGE_GROUPS]; nsims];
 
@@ -1880,7 +2121,7 @@ impl OutputEnsemble {
 
     pub fn save_to_pickle(&mut self, pars: &Input) {
         if pars.output.unwrap().age {
-            let pars_replica = Input::new(pars.algorithm, pars.epidemic, pars.network, pars.opinion, pars.output, pars.vaccination);
+            let pars_replica = Input::new(pars.algorithm, pars.epidemic, pars.opinion, pars.output, pars.size, pars.vaccination);
     
             let assembled_age_output = self.assemble_age_observables(&pars_replica);
     
@@ -1893,7 +2134,7 @@ impl OutputEnsemble {
     
             let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
             let age_string = HEADER_AGE.to_owned() + &exp_string.to_string();
-            let file_name = write_file_name(&pars, age_string, true);
+            let file_name = write_file_name(&pars, age_string);
 
             let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
             path.push(FOLDER_RESULTS);
@@ -1912,7 +2153,7 @@ impl OutputEnsemble {
                 ).unwrap();
                 let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
                 let agents_string = HEADER_AGENT.to_owned() + &exp_string.to_string();
-                let file_name = write_file_name(&pars, agents_string, true);
+                let file_name = write_file_name(&pars, agents_string);
                 
                 let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
                 path.push(FOLDER_RESULTS);
@@ -1923,7 +2164,7 @@ impl OutputEnsemble {
                 let asp_serialized = serde_pickle::to_vec(&agent_stat_package, SerOptions::new(),).unwrap();
                 let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
                 let asp_string = HEADER_AGENT_STATS.to_owned() + &exp_string.to_string();
-                let file_name = write_file_name(&pars, asp_string, true);
+                let file_name = write_file_name(&pars, asp_string);
                 
                 let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
                 path.push(FOLDER_RESULTS);
@@ -1934,7 +2175,7 @@ impl OutputEnsemble {
                 let ad_serialized = serde_pickle::to_vec(&agent_distribution, SerOptions::new(),).unwrap();
                 let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
                 let ad_string = HEADER_AGENT_DISTRIBUTION.to_owned() + &exp_string.to_string();
-                let file_name = write_file_name(&pars, ad_string, true);
+                let file_name = write_file_name(&pars, ad_string);
                 
                 let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
                 path.push(FOLDER_RESULTS);
@@ -1944,7 +2185,7 @@ impl OutputEnsemble {
         }
     
         if pars.output.unwrap().attitude {
-            let pars_replica = Input::new(pars.algorithm, pars.epidemic, pars.network, pars.opinion, pars.output, pars.vaccination);
+            let pars_replica = Input::new(pars.algorithm, pars.epidemic, pars.opinion, pars.output, pars.size, pars.vaccination);
     
             let assembled_attitude_output = self.assemble_attitude_observables(&pars_replica);
     
@@ -1957,7 +2198,7 @@ impl OutputEnsemble {
     
             let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
             let attitude_string = HEADER_ATTITUDE.to_owned() + &exp_string.to_string();
-            let file_name = write_file_name(&pars, attitude_string, true);
+            let file_name = write_file_name(&pars, attitude_string);
 
             let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
             path.push(FOLDER_RESULTS);
@@ -1974,7 +2215,7 @@ impl OutputEnsemble {
                     SerOptions::new(),
                 ).unwrap();
                 let cluster_string = HEADER_CLUSTER.to_owned() + &pars.algorithm.unwrap().experiment_id.to_string();
-                let file_name = write_file_name(&pars, cluster_string, true);
+                let file_name = write_file_name(&pars, cluster_string);
                 
                 let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
                 path.push(FOLDER_RESULTS);
@@ -1985,7 +2226,7 @@ impl OutputEnsemble {
                 let csp_serialized = serde_pickle::to_vec(&cluster_stat_package, SerOptions::new(),).unwrap();
                 let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
                 let csp_string = HEADER_CLUSTER_STATS.to_owned() + &exp_string.to_string();
-                let file_name = write_file_name(&pars, csp_string, true);
+                let file_name = write_file_name(&pars, csp_string);
                 let path = FOLDER_RESULTS.to_owned() + &file_name + ".pickle";
                 std::fs::write(path, csp_serialized).unwrap();
             
@@ -1993,7 +2234,7 @@ impl OutputEnsemble {
                 let cd_serialized = serde_pickle::to_vec(&cluster_distribution, SerOptions::new(),).unwrap();
                 let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
                 let cd_string = HEADER_CLUSTER_DISTRIBUTION.to_owned() + &exp_string.to_string();
-                let file_name = write_file_name(&pars, cd_string, true);
+                let file_name = write_file_name(&pars, cd_string);
                 
                 let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
                 path.push(FOLDER_RESULTS);
@@ -2003,7 +2244,7 @@ impl OutputEnsemble {
         }
 
         if pars.output.unwrap().degree {
-            let pars_replica = Input::new(pars.algorithm, pars.epidemic, pars.network, pars.opinion, pars.output, pars.vaccination);
+            let pars_replica = Input::new(pars.algorithm, pars.epidemic, pars.opinion, pars.output, pars.size, pars.vaccination);
     
             let assembled_degree_output = self.assemble_degree_observables(&pars_replica);
     
@@ -2016,7 +2257,7 @@ impl OutputEnsemble {
     
             let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
             let global_string = "degree_".to_owned() + &exp_string.to_string();
-            let file_name = write_file_name(&pars, global_string, true);
+            let file_name = write_file_name(&pars, global_string);
             
             let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
             path.push(FOLDER_RESULTS);
@@ -2028,10 +2269,10 @@ impl OutputEnsemble {
             let pars_replica = 
             Input::new(
                 pars.algorithm, 
-                pars.epidemic, 
-                pars.network, 
+                pars.epidemic,  
                 pars.opinion, 
                 pars.output, 
+                pars.size,
                 pars.vaccination,
             );
 
@@ -2050,7 +2291,7 @@ impl OutputEnsemble {
         
             let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
             let global_string = HEADER_GLOBAL.to_owned() + &exp_string.to_string();
-            let file_name = write_file_name(&pars, global_string, true);
+            let file_name = write_file_name(&pars, global_string);
             
             let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
             path.push(FOLDER_RESULTS);
@@ -2063,9 +2304,9 @@ impl OutputEnsemble {
             Input::new(
                 pars.algorithm, 
                 pars.epidemic, 
-                pars.network, 
                 pars.opinion, 
                 pars.output, 
+                pars.size,
                 pars.vaccination,
             );
 
@@ -2084,7 +2325,7 @@ impl OutputEnsemble {
     
                 let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
                 let global_string = HEADER_REBUILD.to_owned() + &exp_string.to_string();
-                let file_name = write_file_name(&pars, global_string, true);
+                let file_name = write_file_name(&pars, global_string);
 
                 let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
                 path.push(FOLDER_RESULTS);
@@ -2105,7 +2346,7 @@ impl OutputEnsemble {
     
                 let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
                 let global_string = HEADER_REBUILD_STATS.to_owned() + &exp_string.to_string();
-                let file_name = write_file_name(&pars, global_string, true);
+                let file_name = write_file_name(&pars, global_string);
                 
                 let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
                 path.push(FOLDER_RESULTS);
@@ -2124,7 +2365,7 @@ impl OutputEnsemble {
                 ).unwrap();
                 let exp_string = format!("{}_{}", pars.algorithm.unwrap().experiment_id, pars.vaccination.unwrap().us_state.unwrap());
                 let time_string = HEADER_TIME.to_owned() + &exp_string.to_string();
-                let file_name = write_file_name(&pars, time_string, true);
+                let file_name = write_file_name(&pars, time_string);
                 
                 let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
                 path.push(FOLDER_RESULTS);
@@ -2247,22 +2488,8 @@ pub struct SerializedAgeAssembly {
 }
 
 #[derive(Serialize)]
-pub struct SerializedAgeAssemblyTwoWaves {
-    pub age_w1: AssembledAgeOutput,
-    pub age_w2: AssembledAgeOutput,
-    pub pars: Input,
-}
-
-#[derive(Serialize)]
 pub struct SerializedAgentAssembly {
     pub agent: AssembledAgentOutput,
-    pub pars: Input,
-}
-
-#[derive(Serialize)]
-pub struct SerializedAgentAssemblyTwoWaves {
-    pub agent_w1: AssembledAgentOutput,
-    pub agent_w2: AssembledAgentOutput,
     pub pars: Input,
 }
 
@@ -2281,39 +2508,14 @@ pub struct SerializedClusterAssembly {
 }
 
 #[derive(Serialize)]
-pub struct SerializeClusterAssemblyTwoWaves {
-    pub attitude_w1: Option<AssembledClusterAttitudeOutput>,
-    pub attitude_w2: Option<AssembledClusterAttitudeOutput>,
-    pub cascading_w1: Option<AssembledClusterCascadingOutput>,
-    pub cascading_w2: Option<AssembledClusterCascadingOutput>,
-    pub opinion_health_w1: Option<AssembledClusterOpinionHealthOutput>,
-    pub opinion_health_w2: Option<AssembledClusterOpinionHealthOutput>,
-    pub pars: Input,
-}
-
-#[derive(Serialize)]
 pub struct SerializedDegreeAssembly {
     pub degree: AssembledDegreeOutput,
     pub pars: Input,
 }
 
 #[derive(Serialize)]
-pub struct SerializedDegreeAssemblyTwoWaves {
-    pub degree_w1: AssembledDegreeOutput,
-    pub degree_w2: AssembledDegreeOutput,
-    pub pars: Input,
-}
-
-#[derive(Serialize)]
 pub struct SerializeGlobalAssembly {
     pub global: AssembledGlobalOutput,
-    pub pars: Input,
-}
-
-#[derive(Serialize)]
-pub struct SerializeGlobalAssemblyTwoWaves {
-    pub global_w1: AssembledGlobalOutput,
-    pub global_w2: AssembledGlobalOutput,
     pub pars: Input,
 }
 
@@ -2332,13 +2534,6 @@ pub struct SerializedRebuildStats {
 #[derive(Serialize)]
 pub struct SerializedTimeSeriesAssembly {
     pub time: AssembledTimeSeriesOutput,
-    pub pars: Input,
-}
-
-#[derive(Serialize)]
-pub struct SerializedTimeSeriesAssemblyTwoWaves {
-    pub time_w1: AssembledTimeSeriesOutput,
-    pub time_w2: AssembledTimeSeriesOutput,
     pub pars: Input,
 }
 

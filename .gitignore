@@ -1,6 +1,12 @@
-/target
-/lit/
-/legacy/
+target/
+data/raw
+data/temp
+results/temp
+results/curated
+results/plot
+figures/temp/*.pdf
+figures/plot/*.pdf
+legacy/
 *.pickle
 *.pdf
 *.xlsx
@@ -9,4 +15,4 @@
 .gitignore
 .vscode
 __pycache__/
-.threshold/
+.threshold

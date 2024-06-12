@@ -1,4 +1,4 @@
-use crate::agent::{Status, Attitude};
+use crate::agent::{Attitude, Status};
 
 pub const CONST_ALREADY_THRESHOLD: f64 = 0.0;
 pub const CONST_ELDER_THRESHOLD: usize = 65;

@@ -1,22 +1,21 @@
 use std::collections::{HashMap, HashSet};
+use std::{env, fs};
 
 use rand::Rng;
 use rand::{distributions::WeightedIndex, prelude::*};
-use rv::traits::Rv;
 use rv::dist::NegBinomial;
-use serde::{Serialize, Deserialize};
+use rv::traits::Rv;
+use serde::{Deserialize, Serialize};
+use serde_pickle::SerOptions;
 use strum::Display;
 
 use crate::cons::{CONST_ELDER_THRESHOLD, CONST_MIDDLEAGE_THRESHOLD, CONST_UNDERAGE_THRESHOLD};
 use crate::{
-    utils::{VaccinationPars, sample_from_cdf}, 
     cons::{
-        FLAG_VERBOSE, 
-        CONST_ZEALOT_THRESHOLD, 
-        CONST_ALREADY_THRESHOLD, 
-        CONST_SOON_THRESHOLD, 
-        CONST_MAJORITY_THRESHOLD,
-    }
+        CONST_ALREADY_THRESHOLD, CONST_MAJORITY_THRESHOLD, CONST_SOON_THRESHOLD,
+        CONST_ZEALOT_THRESHOLD, FLAG_VERBOSE,
+    },
+    utils::{sample_from_cdf, VaccinationPars},
 };
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
@@ -29,7 +28,7 @@ pub enum Attitude {
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Display, Debug, clap::ValueEnum, PartialEq, Eq)]
-pub enum HesitancyAttributionModel {
+pub enum HesitancyModel {
     #[serde(rename = "adult")]
     Adult,
     #[serde(rename = "elder")]
@@ -194,10 +193,36 @@ impl Agent {
         }
     }
 
-    fn measure_activation_potential(
-        &mut self, 
-        agent_ensemble: &mut AgentEnsemble,
-    ) {
+    pub fn new_from_node(layer: usize, degree: usize, id: usize, neighbors: Vec<usize>) -> Self {
+        Self {
+            age: layer,
+            degree: degree,
+            health: Health::Susceptible,
+            id,
+            neighbors,
+            opinion: Opinion::Hesitant,
+            status: Status::HesSus,
+            threshold: 0.0,
+            vaccination_target: true,
+            activation_potential: Some(1),
+            attitude: Some(Attitude::Never),
+            cascading_threshold: Some(1),
+            effective_threshold: Some(1.0),
+            final_active_susceptible: None,
+            final_prevalence: None,
+            final_vaccinated: None,
+            infected_by: None,
+            infected_when: None,
+            convinced_when: None,
+            initial_active_susceptible: None,
+            initial_vaccinated: None,
+            removed_when: None,
+            vaccinated_when: None,
+            zealots: None,
+        }
+    }
+
+    fn measure_activation_potential(&mut self, agent_ensemble: &mut AgentEnsemble) {
         let neighbors = self.neighbors.clone();
         let threshold = self.threshold;
         let mut cascading_count = 0;
@@ -217,10 +242,7 @@ impl Agent {
         }
     }
 
-    fn measure_average_neighbor_threshold(
-        &mut self, 
-        agent_ensemble: &mut AgentEnsemble,
-    ) -> f64 {
+    fn measure_average_neighbor_threshold(&mut self, agent_ensemble: &mut AgentEnsemble) -> f64 {
         let neighbors = self.neighbors.clone();
         let mut cumulative_neighbor_threshold = 0.0;
         let degree = self.degree;
@@ -234,10 +256,7 @@ impl Agent {
         average_neighbor_threshold
     }
 
-    pub fn measure_cascading_threshold(
-        &mut self, 
-        agent_ensemble: &mut AgentEnsemble,
-    ) -> usize {
+    pub fn measure_cascading_threshold(&mut self, agent_ensemble: &mut AgentEnsemble) -> usize {
         let neighbors = self.neighbors.clone();
         let threshold = self.threshold;
         let mut cumulative_neighbor_threshold = 0.0;
@@ -250,37 +269,27 @@ impl Agent {
         let average_neighbor_threshold = cumulative_neighbor_threshold / (degree as f64);
 
         match self.attitude.unwrap() {
-            Attitude::Vaccinated => {
-                0
-            },
-            Attitude::Soon => {
-                0
-            },
+            Attitude::Vaccinated => 0,
+            Attitude::Soon => 0,
             Attitude::Someone => {
                 if threshold >= average_neighbor_threshold {
                     0
                 } else {
                     1
                 }
-            },
+            }
             Attitude::Most => {
                 if threshold >= average_neighbor_threshold {
                     0
                 } else {
                     1
                 }
-            },
-            Attitude::Never => {
-                1
-            },
+            }
+            Attitude::Never => 1,
         }
     }
 
-    fn measure_neighborhood(
-        &mut self, 
-        agent_ensemble: &mut AgentEnsemble, 
-        t: usize,
-    ) {
+    fn measure_neighborhood(&mut self, agent_ensemble: &mut AgentEnsemble, t: usize) {
         let neighbors = self.neighbors.clone();
         let threshold = self.threshold;
         let mut active_susceptible = 0;
@@ -339,10 +348,7 @@ impl Agent {
         self.threshold = theta
     }
 
-    fn vaccinated_neighbor_fraction(
-        &mut self, 
-        neighbors: &Vec<Agent>
-    ) -> f64 {
+    fn vaccinated_neighbor_fraction(&mut self, neighbors: &Vec<Agent>) -> f64 {
         let k = self.number_of_neighbors();
         let mut vaccinated_neighbors = 0;
         for neighbor_agent in neighbors {
@@ -354,18 +360,16 @@ impl Agent {
     }
 
     fn sample_age(&mut self, cdf: &Vec<f64>) {
-        self.age = sample_from_cdf(cdf)
+        let mut rng = rand::thread_rng();
+        self.age = sample_from_cdf(cdf, &mut rng)
     }
 
     fn sample_degree(&mut self, cdf: &Vec<f64>) {
-        self.degree = sample_from_cdf(cdf)
+        let mut rng = rand::thread_rng();
+        self.degree = sample_from_cdf(cdf, &mut rng)
     }
 
-    fn sample_degree_from_negative_binomial(
-        &mut self, 
-        mean_value: f64, 
-        _standard_deviation: f64,
-    ) {
+    fn sample_degree_from_negative_binomial(&mut self, mean_value: f64, _standard_deviation: f64) {
         let variance = mean_value + 13.0;
         let r = mean_value.powi(2) / (variance - mean_value);
         let p = r / (r + mean_value);
@@ -373,8 +377,8 @@ impl Agent {
         let mut rng = rand::thread_rng();
         let neg_binom = NegBinomial::new(r, p).unwrap();
 
-        let degree = Rv::<u16>::draw(&neg_binom, &mut rng) as usize; 
-        self.degree = degree; 
+        let degree = Rv::<u16>::draw(&neg_binom, &mut rng) as usize;
+        self.degree = degree;
     }
 }
 
@@ -393,6 +397,19 @@ impl AgentEnsemble {
         agent_ensemble
     }
 
+    pub fn new_from_multilayer(multilayer: &Multilayer) -> Self {
+        let mut agent_ensemble = AgentEnsemble { inner: Vec::new() };
+        for (_, node) in multilayer.inner().iter().enumerate() {
+            let id = node.id;
+            let age = node.layer;
+            let degree = node.degree;
+            let neighbors = node.neighbors.clone();
+            let agent = Agent::new_from_node(age, degree, id, neighbors);
+            agent_ensemble.inner.push(agent);
+        }
+        agent_ensemble
+    }
+
     pub fn inner(&self) -> &Vec<Agent> {
         &self.inner
     }
@@ -405,10 +422,7 @@ impl AgentEnsemble {
         self.inner
     }
 
-    pub fn arrange_nodes_to_age_layers(
-        &self, 
-        age_groups: usize,
-    ) -> Vec<Vec<usize>> {
+    pub fn arrange_nodes_to_age_layers(&self, age_groups: usize) -> Vec<Vec<usize>> {
         let mut nodes_to_layers = vec![Vec::new(); age_groups];
 
         for (_, agent) in self.inner().iter().enumerate() {
@@ -439,29 +453,29 @@ impl AgentEnsemble {
         let nagents = self.number_of_agents();
         let mut cascading_threshold_vec = vec![0; nagents];
 
-        let attitudes: Vec<Attitude> = self.inner().iter().filter_map(|agent| agent.attitude).collect();
-    
+        let attitudes: Vec<Attitude> = self
+            .inner()
+            .iter()
+            .filter_map(|agent| agent.attitude)
+            .collect();
+
         for (agent_idx, agent) in self.inner_mut().iter_mut().enumerate() {
             let attitude = agent.attitude.unwrap();
             let degree = agent.degree;
 
             let cascading_threshold = match attitude {
-                Attitude::Vaccinated => {1},
-                Attitude::Soon => {1},
+                Attitude::Vaccinated => 1,
+                Attitude::Soon => 1,
                 Attitude::Someone => {
                     let neighbors = agent.neighbors.clone();
 
                     let mut cascade_assistant = 0;
 
-                    for &neigh_idx in &neighbors {   
+                    for &neigh_idx in &neighbors {
                         match attitudes[neigh_idx] {
-                            Attitude::Vaccinated => {
-                                cascade_assistant += 1
-                            },
-                            Attitude::Soon => {
-                                cascade_assistant += 1
-                            },
-                            _ => {},        
+                            Attitude::Vaccinated => cascade_assistant += 1,
+                            Attitude::Soon => cascade_assistant += 1,
+                            _ => {}
                         }
                     }
 
@@ -470,31 +484,27 @@ impl AgentEnsemble {
                     } else {
                         0
                     }
-                },
+                }
                 Attitude::Most => {
                     let neighbors = agent.neighbors.clone();
 
                     let mut cascade_assistant = 0;
 
-                    for &neigh_idx in &neighbors {   
+                    for &neigh_idx in &neighbors {
                         match attitudes[neigh_idx] {
-                            Attitude::Vaccinated => {
-                                cascade_assistant += 1
-                            },
-                            Attitude::Soon => {
-                                cascade_assistant += 1
-                            },
-                            _ => {},        
+                            Attitude::Vaccinated => cascade_assistant += 1,
+                            Attitude::Soon => cascade_assistant += 1,
+                            _ => {}
                         }
                     }
 
-                    if cascade_assistant as f64 / degree as f64  >= 0.5 {
+                    if cascade_assistant as f64 / degree as f64 >= 0.5 {
                         1
                     } else {
                         0
                     }
-                },
-                Attitude::Never => {0},
+                }
+                Attitude::Never => 0,
             };
 
             agent.cascading_threshold = Some(cascading_threshold);
@@ -534,17 +544,14 @@ impl AgentEnsemble {
         agent_subensemble
     }
 
-    pub fn collect_intralayer_stubs(
-        &self, 
-        age_groups: usize,
-    ) -> Vec<Vec<usize>> {
+    pub fn collect_intralayer_stubs(&self, age_groups: usize) -> Vec<Vec<usize>> {
         let mut intralayer_stubs = vec![Vec::new(); age_groups];
 
-        for (_, agent) in self.inner().iter().enumerate()  {
+        for (_, agent) in self.inner().iter().enumerate() {
             let id = agent.id;
             let age = agent.age;
             let degree = agent.degree;
-            for _ in 0..degree  {
+            for _ in 0..degree {
                 intralayer_stubs[age].push(id)
             }
         }
@@ -553,7 +560,7 @@ impl AgentEnsemble {
     }
 
     pub fn compute_layer_total_degree(&self, age_groups: usize) -> Vec<f64> {
-        let mut total_degree = vec![0.0; age_groups]; 
+        let mut total_degree = vec![0.0; age_groups];
 
         for (_, agent) in self.inner().iter().enumerate() {
             let age = agent.age;
@@ -624,7 +631,7 @@ impl AgentEnsemble {
             .map(|agent| agent.id)
             .collect()
     }
-    
+
     pub fn gather_active_vaccinated(&self) -> Vec<usize> {
         self.inner()
             .iter()
@@ -634,34 +641,36 @@ impl AgentEnsemble {
     }
 
     pub fn gather_degree_bottom_to_top(&self) -> Vec<usize> {
-        let mut agents_with_degrees: Vec<(usize, usize)> = self.inner().iter()
-        .enumerate()
-        .map(|(id, agent)| (id, agent.neighbors.len()))
-        .collect();
+        let mut agents_with_degrees: Vec<(usize, usize)> = self
+            .inner()
+            .iter()
+            .enumerate()
+            .map(|(id, agent)| (id, agent.neighbors.len()))
+            .collect();
 
         agents_with_degrees.sort_by(|a, b| a.1.cmp(&b.1));
 
         // Extract the agent IDs, discarding the degrees
-        let sorted_agent_ids: Vec<usize> = agents_with_degrees.into_iter()
-            .map(|(id, _)| id)
-            .collect();
+        let sorted_agent_ids: Vec<usize> =
+            agents_with_degrees.into_iter().map(|(id, _)| id).collect();
 
         sorted_agent_ids
     }
 
     pub fn gather_degree_top_to_bottom(&self) -> Vec<usize> {
-        let mut agents_with_degrees: Vec<(usize, usize)> = self.inner().iter()
-        .enumerate()
-        .map(|(id, agent)| (id, agent.neighbors.len()))
-        .collect();
+        let mut agents_with_degrees: Vec<(usize, usize)> = self
+            .inner()
+            .iter()
+            .enumerate()
+            .map(|(id, agent)| (id, agent.neighbors.len()))
+            .collect();
 
         // Sort by degree in decreasing order. If you want to sort by increasing order, use `.sort_by_key(|&(_, degree)| degree);`
         agents_with_degrees.sort_by(|a, b| b.1.cmp(&a.1));
 
         // Extract the agent IDs, discarding the degrees
-        let sorted_agent_ids: Vec<usize> = agents_with_degrees.into_iter()
-            .map(|(id, _)| id)
-            .collect();
+        let sorted_agent_ids: Vec<usize> =
+            agents_with_degrees.into_iter().map(|(id, _)| id).collect();
 
         sorted_agent_ids
     }
@@ -677,10 +686,12 @@ impl AgentEnsemble {
     }
 
     pub fn gather_from_elder_to_younger(&self) -> Vec<usize> {
-        let mut agents: Vec<_> = self.inner().iter() // Use .iter() to get an iterator over the agents
-        .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
-        .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
-        
+        let mut agents: Vec<_> = self
+            .inner()
+            .iter() // Use .iter() to get an iterator over the agents
+            .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
+            .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
+
         // Now sort this vector of references by age in descending order
         agents.sort_by(|a, b| b.age.cmp(&a.age));
 
@@ -689,13 +700,15 @@ impl AgentEnsemble {
     }
 
     pub fn gather_from_younger_to_elder(&self) -> Vec<usize> {
-        let mut agents: Vec<_> = self.inner().iter() // Use .iter() to get an iterator over the agents
-        .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
-        .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
-        
+        let mut agents: Vec<_> = self
+            .inner()
+            .iter() // Use .iter() to get an iterator over the agents
+            .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
+            .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
+
         // Now sort this vector of references by age in descending order
         agents.sort_by(|a, b| a.age.cmp(&b.age));
-        
+
         // Map the sorted agent references to their IDs and collect into a vector
         agents.iter().map(|agent| agent.id).collect()
     }
@@ -813,8 +826,8 @@ impl AgentEnsemble {
     }
 
     pub fn generate_age_multilayer_network(
-        &mut self, 
-        layer_probability: &Vec<Vec<f64>>, 
+        &mut self,
+        layer_probability: &Vec<Vec<f64>>,
         intralayer_stubs: &mut Vec<Vec<usize>>,
     ) {
         let mut rng = rand::thread_rng();
@@ -828,34 +841,44 @@ impl AgentEnsemble {
             let focal_layer = focal_agent.age;
             let target_layer_probs = &layer_probability[focal_layer];
             let layer_dist = WeightedIndex::new(target_layer_probs).unwrap();
-    
+
             let mut attempts = 0;
-    
+
             while attempts < max_attempts {
-                if !intralayer_stubs[focal_layer].contains(&focal_id) ||
-                   *node_connections.get(&focal_id).unwrap_or(&0) >= focal_agent.degree {
+                if !intralayer_stubs[focal_layer].contains(&focal_id)
+                    || *node_connections.get(&focal_id).unwrap_or(&0) >= focal_agent.degree
+                {
                     break; // Focal node has reached its connection capacity or is no longer eligible
                 }
-    
+
                 let target_layer = layer_dist.sample(&mut rng);
-    
+
                 if intralayer_stubs[target_layer].is_empty() {
                     attempts += 1;
                     continue; // Skip if the target layer is empty
                 }
-    
+
                 let target_index = rng.gen_range(0..intralayer_stubs[target_layer].len());
                 let target_id = intralayer_stubs[target_layer][target_index];
-    
-                if target_id != focal_id && !connection_pairs.contains(&(focal_id, target_id)) && !connection_pairs.contains(&(target_id, focal_id)) {
+
+                if target_id != focal_id
+                    && !connection_pairs.contains(&(focal_id, target_id))
+                    && !connection_pairs.contains(&(target_id, focal_id))
+                {
                     connection_pairs.insert((focal_id, target_id));
-    
+
                     intralayer_stubs[target_layer].remove(target_index);
 
-                    if let Some(focal_index) = intralayer_stubs[focal_layer].iter().position(|&id| id == focal_id) {
+                    if let Some(focal_index) = intralayer_stubs[focal_layer]
+                        .iter()
+                        .position(|&id| id == focal_id)
+                    {
                         intralayer_stubs[focal_layer].remove(focal_index);
                     } else {
-                        println!("Tried to remove focal_id: {} but it was not found in its layer", focal_id);
+                        println!(
+                            "Tried to remove focal_id: {} but it was not found in its layer",
+                            focal_id
+                        );
                     }
 
                     // Update connection count for both focal and target nodes
@@ -866,7 +889,7 @@ impl AgentEnsemble {
                 }
             }
         }
-    
+
         // Establish connections using IDs, considering each pair as a bidirectional connection.
         for &(focal_id, target_id) in &connection_pairs {
             if let Some(agent) = self.inner_mut().get_mut(focal_id) {
@@ -880,19 +903,6 @@ impl AgentEnsemble {
                 }
             }
         }
-
-        //let mut unequalized_agents = 0;
-        // Remove duplicate and self-connections
-        //for agent in self.inner_mut() {
-        //    agent.neighbors.sort_unstable();
-        //    agent.neighbors.dedup();
-        //    agent.neighbors.retain(|&x| x != agent.id);
-        //    if agent.degree != agent.neighbors.len() {
-        //        println!("Agent's degree is {}, whereas agent's neighbor number is {}", agent.degree, agent.neighbors.len());
-        //        unequalized_agents += 1;
-        //    }
-        //}
-        //println!("Number of unequalized agents is {}", unequalized_agents);
     }
 
     pub fn introduce_infections(&mut self, model: SeedModel, nseeds: usize) {
@@ -924,19 +934,18 @@ impl AgentEnsemble {
                 if FLAG_VERBOSE {
                     println!("Effective infected individuals = {effective_infected}");
                 }
-            },
+            }
             SeedModel::BottomMultiLocus => {
                 if FLAG_VERBOSE {
                     println!("Sorry! Not implemented yet!");
                 }
                 todo!()
-            },
+            }
             SeedModel::RandomMultiLocus => {
                 let mut rng = rand::thread_rng();
                 let nagents = self.number_of_agents();
                 let agent_indices: Vec<usize> = (0..nagents).collect();
-                let selected_indices = 
-                agent_indices.choose_multiple(&mut rng, nseeds);
+                let selected_indices = agent_indices.choose_multiple(&mut rng, nseeds);
 
                 for idx in selected_indices {
                     match self.inner_mut()[*idx].status {
@@ -944,14 +953,14 @@ impl AgentEnsemble {
                             self.inner_mut()[*idx].status = Status::HesInf;
                             self.inner_mut()[*idx].health = Health::Infected;
                         }
-                        Status::ActSus =>  {
+                        Status::ActSus => {
                             self.inner_mut()[*idx].status = Status::ActInf;
                             self.inner_mut()[*idx].health = Health::Infected;
                         }
                         _ => (),
                     }
                 }
-            },
+            }
             SeedModel::RandomNeighborhood => {
                 let mut rng = rand::thread_rng();
                 let nagents = self.number_of_agents();
@@ -981,13 +990,13 @@ impl AgentEnsemble {
                 if FLAG_VERBOSE {
                     println!("Effective infected individuals = {effective_infected}");
                 }
-            },
+            }
             SeedModel::TopDegreeMultiLocus => {
                 if FLAG_VERBOSE {
                     println!("Sorry! Not implemented yet!")
                 }
                 todo!()
-            },
+            }
             SeedModel::TopDegreeNeighborhood => {
                 let hub = self.find_top_degree_agent().unwrap();
                 let hub_neighs = self.inner()[hub].neighbors.clone();
@@ -1015,56 +1024,42 @@ impl AgentEnsemble {
                 if FLAG_VERBOSE {
                     println!("Effective infected individuals = {effective_infected}");
                 }
-            },
+            }
         }
     }
 
-    fn introduce_infections_and_vaccines(
-        &mut self, 
-        nseeds: usize, 
-        nvaxx: usize
-    ) {
+    fn introduce_infections_and_vaccines(&mut self, nseeds: usize, nvaxx: usize) {
         let mut rng = rand::thread_rng();
         let nagents = self.number_of_agents();
         let agent_indices: Vec<usize> = (0..nagents).collect();
-        let selected_indices = 
-        agent_indices.choose_multiple(&mut rng, nseeds);
-        
+        let selected_indices = agent_indices.choose_multiple(&mut rng, nseeds);
+
         for idx in selected_indices {
             match self.inner_mut()[*idx].status {
-                Status::HesSus => 
-                self.inner_mut()[*idx].status = Status::HesInf,
-                Status::ActSus => 
-                self.inner_mut()[*idx].status = Status::ActInf,
+                Status::HesSus => self.inner_mut()[*idx].status = Status::HesInf,
+                Status::ActSus => self.inner_mut()[*idx].status = Status::ActInf,
                 _ => (),
             }
         }
 
         let mut rng = rand::thread_rng();
         let agent_indices: Vec<usize> = (0..self.number_of_agents()).collect();
-        let selected_indices = 
-        agent_indices.choose_multiple(&mut rng, nseeds + nvaxx);
-        
+        let selected_indices = agent_indices.choose_multiple(&mut rng, nseeds + nvaxx);
+
         for (count, &idx) in selected_indices.enumerate() {
             if count < nseeds {
                 match self.inner_mut()[idx].status {
-                    Status::HesSus => 
-                    self.inner_mut()[idx].status = Status::HesInf,
-                    Status::ActSus => 
-                    self.inner_mut()[idx].status = Status::ActInf,
+                    Status::HesSus => self.inner_mut()[idx].status = Status::HesInf,
+                    Status::ActSus => self.inner_mut()[idx].status = Status::ActInf,
                     _ => (),
                 }
-            }
-            else {
+            } else {
                 self.inner_mut()[idx].status = Status::ActVac;
             }
-        }         
+        }
     }
 
-    pub fn introduce_infections_dd(
-        &mut self, model: SeedModel, 
-        nseeds: usize,
-    ) {
+    pub fn introduce_infections_dd(&mut self, model: SeedModel, nseeds: usize) {
         match model {
             SeedModel::BottomDegreeNeighborhood => {
                 let hub = self.find_bottom_degree_agent().unwrap();
@@ -1093,19 +1088,18 @@ impl AgentEnsemble {
                 if FLAG_VERBOSE {
                     println!("Effective infected individuals = {effective_infected}");
                 }
-            },
+            }
             SeedModel::BottomMultiLocus => {
                 if FLAG_VERBOSE {
                     println!("Sorry! Not implemented yet!")
                 }
                 todo!()
-            },
+            }
             SeedModel::RandomMultiLocus => {
                 let mut rng = rand::thread_rng();
                 let nagents = self.number_of_agents();
                 let agent_indices: Vec<usize> = (0..nagents).collect();
-                let selected_indices = 
-                agent_indices.choose_multiple(&mut rng, nseeds);
+                let selected_indices = agent_indices.choose_multiple(&mut rng, nseeds);
 
                 for idx in selected_indices {
                     match self.inner_mut()[*idx].status {
@@ -1113,14 +1107,14 @@ impl AgentEnsemble {
                             self.inner_mut()[*idx].status = Status::HesInf;
                             self.inner_mut()[*idx].health = Health::Infected;
                         }
-                        Status::ActSus =>  {
+                        Status::ActSus => {
                             self.inner_mut()[*idx].status = Status::ActInf;
                             self.inner_mut()[*idx].health = Health::Infected;
                         }
                         _ => (),
                     }
                 }
-            },
+            }
             SeedModel::RandomNeighborhood => {
                 let mut rng = rand::thread_rng();
                 let nagents = self.number_of_agents();
@@ -1150,13 +1144,13 @@ impl AgentEnsemble {
                 if FLAG_VERBOSE {
                     println!("Effective infected individuals = {effective_infected}");
                 }
-            },
+            }
             SeedModel::TopDegreeMultiLocus => {
                 if FLAG_VERBOSE {
                     println!("Sorry! Not implemented yet!")
                 }
                 todo!()
-            },
+            }
             SeedModel::TopDegreeNeighborhood => {
                 let hub = self.find_top_degree_agent().unwrap();
                 let hub_neighs = self.inner()[hub].neighbors.clone();
@@ -1184,15 +1178,11 @@ impl AgentEnsemble {
                 if FLAG_VERBOSE {
                     println!("Effective infected individuals = {effective_infected}");
                 }
-            },
+            }
         }
     }
 
-    pub fn introduce_opinions(
-        &mut self, 
-        active_fraction: f64, 
-        zealot_fraction: f64,
-    ) {
+    pub fn introduce_opinions(&mut self, active_fraction: f64, zealot_fraction: f64) {
         let total_fraction = active_fraction + zealot_fraction;
 
         // Check if total fraction exceeds 1
@@ -1205,77 +1195,69 @@ impl AgentEnsemble {
             let n_active = (active_fraction * self.number_of_agents() as f64) as usize;
             let n_zealot = (adjusted_zealot_fraction * self.number_of_agents() as f64) as usize;
             let agent_indices: Vec<usize> = (0..self.number_of_agents()).collect();
-            let selected_indices = 
-            agent_indices.choose_multiple(&mut rng, n_active + n_zealot);
-        
+            let selected_indices = agent_indices.choose_multiple(&mut rng, n_active + n_zealot);
+
             for (count, &idx) in selected_indices.enumerate() {
                 if count < n_active {
                     match self.inner_mut()[idx].status {
                         Status::HesSus => {
                             self.inner_mut()[idx].status = Status::ActSus;
                             self.inner_mut()[idx].opinion = Opinion::Active;
-                        },
+                        }
                         Status::HesInf => {
                             self.inner_mut()[idx].status = Status::ActInf;
                             self.inner_mut()[idx].opinion = Opinion::Active;
-                        },
+                        }
                         Status::HesRem => {
                             self.inner_mut()[idx].status = Status::ActRem;
                             self.inner_mut()[idx].opinion = Opinion::Active;
                         }
                         _ => (),
                     }
-                }
-                else {
+                } else {
                     self.inner_mut()[idx].threshold = CONST_ZEALOT_THRESHOLD;
                 }
             }
-            
         } else {
             let mut rng = rand::thread_rng();
             let n_active = (active_fraction * self.number_of_agents() as f64) as usize;
             let n_zealot = (zealot_fraction * self.number_of_agents() as f64) as usize;
             let agent_indices: Vec<usize> = (0..self.number_of_agents()).collect();
-            let selected_indices = 
-            agent_indices.choose_multiple(&mut rng, n_active + n_zealot);
-            
+            let selected_indices = agent_indices.choose_multiple(&mut rng, n_active + n_zealot);
+
             for (count, &idx) in selected_indices.enumerate() {
                 if count < n_active {
                     match self.inner_mut()[idx].status {
                         Status::HesSus => {
                             self.inner_mut()[idx].status = Status::ActSus;
                             self.inner_mut()[idx].opinion = Opinion::Active;
-                        },
+                        }
                         Status::HesInf => {
                             self.inner_mut()[idx].status = Status::ActInf;
                             self.inner_mut()[idx].opinion = Opinion::Active;
-                        },
+                        }
                         Status::HesRem => {
                             self.inner_mut()[idx].status = Status::ActRem;
                             self.inner_mut()[idx].opinion = Opinion::Active;
                         }
                         _ => (),
                     }
-                }
-                else {
+                } else {
                     self.inner_mut()[idx].threshold = CONST_ZEALOT_THRESHOLD;
                 }
             }
         }
     }
 
-    pub fn introduce_vaccination_attitudes(
-        &mut self,
-        vpars: &VaccinationPars,
-    ) {
-        let hesitancy_attribution_model = vpars.hesitancy_attribution;
+    pub fn introduce_vaccination_attitudes(&mut self, vpars: &VaccinationPars) {
+        let hesitancy_model = vpars.model_hesitancy;
         let nagents = self.number_of_agents();
 
-        let already_count = (vpars.already * nagents as f64) as i32;
-        let soon_count = (vpars.soon * nagents as f64) as i32;
-        let someone_count = (vpars.someone * nagents as f64) as i32;
-        let majority_count = (vpars.majority * nagents as f64) as i32;
-        let never_count = (vpars.never * nagents as f64) as i32;
+        let already_count = (vpars.fraction_vaccinated * nagents as f64) as i32;
+        let soon_count = (vpars.fraction_soon * nagents as f64) as i32;
+        let someone_count = (vpars.fraction_someone * nagents as f64) as i32;
+        let majority_count = (vpars.fraction_majority * nagents as f64) as i32;
+        let never_count = (vpars.fraction_zealot * nagents as f64) as i32;
 
         let mut already_assigned = 0;
         let mut soon_assigned = 0;
@@ -1283,21 +1265,21 @@ impl AgentEnsemble {
         let mut majority_assigned = 0;
         let mut never_assigned = 0;
 
-        let age_threshold = vpars.age_threshold;
+        let age_threshold = vpars.threshold_age;
 
-        match hesitancy_attribution_model {
-            HesitancyAttributionModel::Adult => {
+        match hesitancy_model {
+            HesitancyModel::Adult => {
                 todo!()
-            },
-            HesitancyAttributionModel::DataDriven => {
+            }
+            HesitancyModel::DataDriven => {
                 todo!()
-            },
-            HesitancyAttributionModel::Elder => {
+            }
+            HesitancyModel::Elder => {
                 let mut all_indices: Vec<usize> = (0..nagents).collect();
                 all_indices.shuffle(&mut rand::thread_rng());
 
                 let elder_indices: HashSet<usize> = self.gather_elders().into_iter().collect();
-                
+
                 all_indices.retain(|x| !elder_indices.contains(x));
 
                 for i in elder_indices {
@@ -1366,9 +1348,9 @@ impl AgentEnsemble {
                         self.inner_mut()[i].threshold = CONST_ZEALOT_THRESHOLD;
                         never_assigned += 1;
                     }
-                }        
-            },
-            HesitancyAttributionModel::ElderToYoung => {
+                }
+            }
+            HesitancyModel::ElderToYoung => {
                 let indices: Vec<usize> = self.gather_from_elder_to_younger();
 
                 for i in indices {
@@ -1400,13 +1382,14 @@ impl AgentEnsemble {
                         already_assigned += 1;
                     }
                 }
-            },
-            HesitancyAttributionModel::Middleage => {
+            }
+            HesitancyModel::Middleage => {
                 let mut all_indices: Vec<usize> = (0..nagents).collect();
                 all_indices.shuffle(&mut rand::thread_rng());
 
-                let middleage_indices: HashSet<usize> = self.gather_middleage().into_iter().collect();
-                
+                let middleage_indices: HashSet<usize> =
+                    self.gather_middleage().into_iter().collect();
+
                 all_indices.retain(|x| !middleage_indices.contains(x));
 
                 for i in middleage_indices {
@@ -1475,9 +1458,9 @@ impl AgentEnsemble {
                         self.inner_mut()[i].threshold = CONST_ZEALOT_THRESHOLD;
                         never_assigned += 1;
                     }
-                }  
-            },
-            HesitancyAttributionModel::Random => {
+                }
+            }
+            HesitancyModel::Random => {
                 let mut indices: Vec<usize> = (0..nagents).collect();
                 indices.shuffle(&mut rand::thread_rng());
 
@@ -1518,16 +1501,17 @@ impl AgentEnsemble {
                         never_assigned += 1;
                     }
                 }
-            },
-            HesitancyAttributionModel::Underage => {
+            }
+            HesitancyModel::Underage => {
                 todo!()
-            },
-            HesitancyAttributionModel::Young => {
+            }
+            HesitancyModel::Young => {
                 let mut all_indices: Vec<usize> = (0..nagents).collect();
                 all_indices.shuffle(&mut rand::thread_rng());
 
-                let young_adult_indices: HashSet<usize> = self.gather_young_adults().into_iter().collect();
-                
+                let young_adult_indices: HashSet<usize> =
+                    self.gather_young_adults().into_iter().collect();
+
                 all_indices.retain(|x| !young_adult_indices.contains(x));
 
                 for i in young_adult_indices {
@@ -1597,8 +1581,8 @@ impl AgentEnsemble {
                         never_assigned += 1;
                     }
                 }
-            },
-            HesitancyAttributionModel::YoungToElder => {
+            }
+            HesitancyModel::YoungToElder => {
                 let indices: Vec<usize> = self.gather_from_younger_to_elder();
 
                 for i in indices {
@@ -1630,30 +1614,27 @@ impl AgentEnsemble {
                         already_assigned += 1;
                     }
                 }
-            },
+            }
         }
-    } 
+    }
 
-    pub fn introduce_vaccination_thresholds(
-        &mut self, 
-        vpars: &VaccinationPars
-    ) {
+    pub fn introduce_vaccination_thresholds(&mut self, vpars: &VaccinationPars) {
         let nagents = self.number_of_agents();
         let mut indices: Vec<usize> = (0..nagents).collect();
         indices.shuffle(&mut rand::thread_rng());
 
-        let already_count = (vpars.already * nagents as f64) as i32;
-        let soon_count = (vpars.soon * nagents as f64) as i32;
-        let someone_count = (vpars.someone * nagents as f64) as i32;
-        let majority_count = (vpars.majority * nagents as f64) as i32;
-        let never_count = (vpars.never * nagents as f64) as i32;
-        
+        let already_count = (vpars.fraction_vaccinated * nagents as f64) as i32;
+        let soon_count = (vpars.fraction_soon * nagents as f64) as i32;
+        let someone_count = (vpars.fraction_someone * nagents as f64) as i32;
+        let majority_count = (vpars.fraction_majority * nagents as f64) as i32;
+        let never_count = (vpars.fraction_zealot * nagents as f64) as i32;
+
         let mut already_assigned = 0;
         let mut soon_assigned = 0;
         let mut someone_assigned = 0;
         let mut majority_assigned = 0;
         let mut never_assigned = 0;
-        
+
         for i in indices {
             if already_assigned < already_count {
                 self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1694,7 +1675,7 @@ impl AgentEnsemble {
         let nagents = self.number_of_agents();
         let agent_indices: Vec<usize> = (0..nagents).collect();
         let mut selected_indices: Vec<usize> = vec![];
-        
+
         while selected_indices.len() < nseeds {
             let idx = agent_indices.choose(&mut rng).unwrap();
             if let Status::HesSus | Status::ActSus = self.inner_mut()[*idx].status {
@@ -1720,17 +1701,14 @@ impl AgentEnsemble {
         }
     }
 
-    pub fn sample_degree_conditioned_to_age(
-        &mut self, 
-        intralayer_average_degree: &Vec<f64>,
-    ) {
+    pub fn sample_degree_conditioned_to_age(&mut self, intralayer_average_degree: &Vec<f64>) {
         for agent in self.inner_mut() {
             let age = agent.age;
             let average_degree = intralayer_average_degree[age];
             let standard_deviation = 4.0;
             agent.sample_degree_from_negative_binomial(average_degree, standard_deviation);
         }
-    } 
+    }
 
     pub fn set_opinion_threshold(&mut self, threshold: f64) {
         for agent in self.inner_mut() {
@@ -1739,55 +1717,34 @@ impl AgentEnsemble {
     }
 
     pub fn set_vaccination_policy_model(
-        &mut self, vaccination_policy: VaccinationPolicy, 
+        &mut self,
+        vaccination_policy: VaccinationPolicy,
         vaccination_quota: f64,
     ) {
         match vaccination_policy {
             VaccinationPolicy::AgeAdult => {
                 todo!()
-            },
-            VaccinationPolicy::AgeElder => {
-                self.target_age_elders(vaccination_quota)
-            },
-            VaccinationPolicy::AgeMiddleage => {
-                self.target_age_middleage(vaccination_quota)
-            },
-            VaccinationPolicy::AgeTop => {
-                self.target_age_top(vaccination_quota)
-            },
-            VaccinationPolicy::AgeUnderage => {
-                self.target_age_underage(vaccination_quota)
-            },
-            VaccinationPolicy::AgeYoung => {
-                self.target_age_young_adult(vaccination_quota)
-            },
-            VaccinationPolicy::AgeYoungToElder => {
-                self.target_age_young_to_elder(vaccination_quota)
-            },
-            VaccinationPolicy::Automatic => {
-                self.target_automatic(vaccination_quota)
-            },
+            }
+            VaccinationPolicy::AgeElder => self.target_age_elders(vaccination_quota),
+            VaccinationPolicy::AgeMiddleage => self.target_age_middleage(vaccination_quota),
+            VaccinationPolicy::AgeTop => self.target_age_top(vaccination_quota),
+            VaccinationPolicy::AgeUnderage => self.target_age_underage(vaccination_quota),
+            VaccinationPolicy::AgeYoung => self.target_age_young_adult(vaccination_quota),
+            VaccinationPolicy::AgeYoungToElder => self.target_age_young_to_elder(vaccination_quota),
+            VaccinationPolicy::Automatic => self.target_automatic(vaccination_quota),
             VaccinationPolicy::ComboElderTop => {
                 todo!()
-            },
+            }
             VaccinationPolicy::ComboYoungTop => {
                 todo!()
-            },
+            }
             VaccinationPolicy::DataDriven => {
                 todo!()
-            },
-            VaccinationPolicy::DegreeBottom => {
-                self.target_degree_bottom_to_top(vaccination_quota)
-            },
-            VaccinationPolicy::DegreeRandom => {
-                self.target_random(vaccination_quota)
-            },
-            VaccinationPolicy::DegreeTop => {
-                self.target_degree_top_to_bottom(vaccination_quota)
-            },
-            VaccinationPolicy::Random => {
-                self.target_random(vaccination_quota)
-            },
+            }
+            VaccinationPolicy::DegreeBottom => self.target_degree_bottom_to_top(vaccination_quota),
+            VaccinationPolicy::DegreeRandom => self.target_random(vaccination_quota),
+            VaccinationPolicy::DegreeTop => self.target_degree_top_to_bottom(vaccination_quota),
+            VaccinationPolicy::Random => self.target_random(vaccination_quota),
         }
     }
 
@@ -1801,14 +1758,14 @@ impl AgentEnsemble {
             }
             if agent.age < CONST_UNDERAGE_THRESHOLD {
                 agent.vaccination_target = true;
-                target_quota += 1.0 / nagents as f64;   
+                target_quota += 1.0 / nagents as f64;
             }
         }
     }
 
     pub fn target_age_middleage(&mut self, vaccination_quota: f64) {
         let mut target_quota = 0.0;
-        let nagents =self.number_of_agents();
+        let nagents = self.number_of_agents();
 
         for agent in self.inner_mut() {
             if target_quota >= vaccination_quota {
@@ -1816,7 +1773,7 @@ impl AgentEnsemble {
             }
             if CONST_MIDDLEAGE_THRESHOLD <= agent.age && CONST_ELDER_THRESHOLD > agent.age {
                 agent.vaccination_target = true;
-                target_quota += 1.0 / nagents as f64;   
+                target_quota += 1.0 / nagents as f64;
             }
         }
     }
@@ -1825,10 +1782,12 @@ impl AgentEnsemble {
         let mut target_quota = 0.0;
         let nagents = self.number_of_agents();
 
-        let mut agents: Vec<_> = self.inner().iter() // Use .iter() to get an iterator over the agents
-        .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
-        .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
-        
+        let mut agents: Vec<_> = self
+            .inner()
+            .iter() // Use .iter() to get an iterator over the agents
+            .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
+            .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
+
         // Now sort this vector of references by age in descending order
         agents.sort_by(|a, b| b.age.cmp(&a.age));
 
@@ -1841,7 +1800,7 @@ impl AgentEnsemble {
             }
             if self.inner()[id].age < CONST_UNDERAGE_THRESHOLD {
                 self.inner_mut()[id].vaccination_target = true;
-                target_quota += 1.0 / nagents as f64;   
+                target_quota += 1.0 / nagents as f64;
             }
         }
     }
@@ -1856,7 +1815,7 @@ impl AgentEnsemble {
             }
             if agent.age >= CONST_ELDER_THRESHOLD {
                 agent.vaccination_target = true;
-                target_quota += 1.0 / nagents as f64;   
+                target_quota += 1.0 / nagents as f64;
             }
         }
     }
@@ -1871,7 +1830,7 @@ impl AgentEnsemble {
             }
             if agent.age >= CONST_UNDERAGE_THRESHOLD && agent.age < CONST_MIDDLEAGE_THRESHOLD {
                 agent.vaccination_target = true;
-                target_quota += 1.0 / nagents as f64;   
+                target_quota += 1.0 / nagents as f64;
             }
         }
     }
@@ -1880,13 +1839,15 @@ impl AgentEnsemble {
         let mut target_quota = 0.0;
         let nagents = self.number_of_agents();
 
-        let mut agents: Vec<_> = self.inner().iter() // Use .iter() to get an iterator over the agents
-        .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
-        .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
-        
+        let mut agents: Vec<_> = self
+            .inner()
+            .iter() // Use .iter() to get an iterator over the agents
+            .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
+            .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
+
         // Now sort this vector of references by age in descending order
         agents.sort_by(|a, b| a.age.cmp(&b.age));
-        
+
         // Map the sorted agent references to their IDs and collect into a vector
         let young_to_elder: Vec<usize> = agents.iter().map(|agent| agent.id).collect();
 
@@ -1896,7 +1857,7 @@ impl AgentEnsemble {
             }
             if self.inner()[id].age < CONST_UNDERAGE_THRESHOLD {
                 self.inner_mut()[id].vaccination_target = true;
-                target_quota += 1.0 / nagents as f64;   
+                target_quota += 1.0 / nagents as f64;
             }
         }
     }
@@ -1918,16 +1879,17 @@ impl AgentEnsemble {
         let mut target_quota = 0.0;
         let nagents = self.number_of_agents();
 
-        let mut agents_with_degrees: Vec<(usize, usize)> = self.inner().iter()
-        .enumerate()
-        .map(|(id, agent)| (id, agent.neighbors.len()))
-        .collect();
+        let mut agents_with_degrees: Vec<(usize, usize)> = self
+            .inner()
+            .iter()
+            .enumerate()
+            .map(|(id, agent)| (id, agent.neighbors.len()))
+            .collect();
 
         agents_with_degrees.sort_by(|a, b| a.1.cmp(&b.1));
 
-        let bottom_to_top_ids: Vec<usize> = agents_with_degrees.into_iter()
-            .map(|(id, _)| id)
-            .collect();
+        let bottom_to_top_ids: Vec<usize> =
+            agents_with_degrees.into_iter().map(|(id, _)| id).collect();
 
         for id in bottom_to_top_ids {
             if target_quota >= vaccination_quota {
@@ -1935,7 +1897,7 @@ impl AgentEnsemble {
             }
             if self.inner()[id].age < CONST_UNDERAGE_THRESHOLD {
                 self.inner_mut()[id].vaccination_target = true;
-                target_quota += 1.0 / nagents as f64;   
+                target_quota += 1.0 / nagents as f64;
             }
         }
     }
@@ -1943,17 +1905,18 @@ impl AgentEnsemble {
     pub fn target_degree_top_to_bottom(&mut self, vaccination_quota: f64) {
         let mut target_quota = 0.0;
         let nagents = self.number_of_agents();
-        
-        let mut agents_with_degrees: Vec<(usize, usize)> = self.inner().iter()
-        .enumerate()
-        .map(|(id, agent)| (id, agent.neighbors.len()))
-        .collect();
+
+        let mut agents_with_degrees: Vec<(usize, usize)> = self
+            .inner()
+            .iter()
+            .enumerate()
+            .map(|(id, agent)| (id, agent.neighbors.len()))
+            .collect();
 
         agents_with_degrees.sort_by(|a, b| b.1.cmp(&a.1));
 
-        let top_to_bottom_ids: Vec<usize> = agents_with_degrees.into_iter()
-            .map(|(id, _)| id)
-            .collect();
+        let top_to_bottom_ids: Vec<usize> =
+            agents_with_degrees.into_iter().map(|(id, _)| id).collect();
 
         for id in top_to_bottom_ids {
             if target_quota >= vaccination_quota {
@@ -1961,7 +1924,7 @@ impl AgentEnsemble {
             }
             if self.inner()[id].age < CONST_UNDERAGE_THRESHOLD {
                 self.inner_mut()[id].vaccination_target = true;
-                target_quota += 1.0 / nagents as f64;   
+                target_quota += 1.0 / nagents as f64;
             }
         }
     }
@@ -1980,7 +1943,7 @@ impl AgentEnsemble {
             target_quota += 1.0 / nagents as f64;
         }
     }
-    
+
     pub fn total_active(&self) -> u32 {
         let mut summa = 0;
         for agent in self.inner() {
@@ -2043,7 +2006,7 @@ impl AgentEnsemble {
 
     pub fn total_zealot(&self) -> usize {
         let mut summa = 0;
-        for agent in self.inner()  {
+        for agent in self.inner() {
             if agent.threshold > 1.0 {
                 summa += 1;
             }
@@ -2051,11 +2014,7 @@ impl AgentEnsemble {
         summa
     }
 
-    pub fn update_list(
-        &self, 
-        list_to_update: &mut [usize], 
-        status: Status
-    ) -> Vec<usize> {
+    pub fn update_list(&self, list_to_update: &mut [usize], status: Status) -> Vec<usize> {
         let mut new_list = Vec::new();
         match status {
             Status::HesSus => {
@@ -2065,7 +2024,7 @@ impl AgentEnsemble {
                         new_list.push(agent_id);
                     }
                 }
-            },
+            }
             Status::ActSus => {
                 for a in list_to_update.iter() {
                     let agent_id = *a;
@@ -2073,7 +2032,7 @@ impl AgentEnsemble {
                         new_list.push(agent_id);
                     }
                 }
-            },
+            }
             Status::HesInf => {
                 for a in list_to_update.iter() {
                     let agent_id = *a;
@@ -2081,7 +2040,7 @@ impl AgentEnsemble {
                         new_list.push(agent_id);
                     }
                 }
-            },
+            }
             Status::ActInf => {
                 for a in list_to_update.iter() {
                     let agent_id = *a;
@@ -2089,11 +2048,215 @@ impl AgentEnsemble {
                         new_list.push(agent_id);
                     }
                 }
-            },
-            _ => {
-                /* do nothing */
             }
+            _ => { /* do nothing */ }
         }
         new_list
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Node {
+    pub id: usize,
+    pub layer: usize,
+    pub degree: usize,
+    pub neighbors: Vec<usize>,
+}
+
+impl Node {
+    fn sample_degree_from_negative_binomial(
+        &mut self,
+        mean_value: f64,
+        _standard_deviation: f64,
+        rng: &mut ThreadRng,
+    ) {
+        let variance = mean_value + 13.0;
+        let r = mean_value.powi(2) / (variance - mean_value);
+        let p = r / (r + mean_value);
+
+        let neg_binom = NegBinomial::new(r, p).unwrap();
+
+        let degree = Rv::<u16>::draw(&neg_binom, rng) as usize;
+        self.degree = degree;
+    }
+
+    fn sample_layer_from_cdf(&mut self, cdf: &Vec<f64>, rng: &mut ThreadRng) {
+        self.layer = sample_from_cdf(cdf, rng)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Multilayer {
+    inner: Vec<Node>,
+}
+
+impl Multilayer {
+    pub fn new(size: usize) -> Self {
+        let mut multilayer = Multilayer { inner: Vec::new() };
+
+        for _ in 0..size {
+            let node = Node {
+                id: 0,
+                layer: 0,
+                degree: 0,
+                neighbors: Vec::new(),
+            };
+            multilayer.inner.push(node);
+        }
+
+        multilayer
+    }
+
+    pub fn inner(&self) -> &Vec<Node> {
+        &self.inner
+    }
+
+    pub fn inner_mut(&mut self) -> &mut Vec<Node> {
+        &mut self.inner
+    }
+
+    pub fn into_inner(self) -> Vec<Node> {
+        self.inner
+    }
+
+    pub fn collect_intralayer_stubs(&self, nlayers: usize) -> Vec<Vec<usize>> {
+        let mut intralayer_stubs = vec![Vec::new(); nlayers];
+
+        for (_, node) in self.inner().iter().enumerate() {
+            let id = node.id;
+            let layer = node.layer;
+            let degree = node.degree;
+            for _ in 0..degree {
+                intralayer_stubs[layer].push(id)
+            }
+        }
+
+        intralayer_stubs
+    }
+
+    pub fn generate_multilayer_network(
+        &mut self,
+        layer_probability: &Vec<Vec<f64>>,
+        intralayer_stubs: &mut Vec<Vec<usize>>,
+        rng: &mut ThreadRng,
+    ) {
+        let mut connection_pairs = HashSet::new();
+        let mut node_connections: HashMap<usize, usize> = HashMap::new();
+        let max_attempts = 100;
+
+        for (_, focal_agent) in self.inner().iter().enumerate() {
+            let focal_id = focal_agent.id;
+            let focal_layer = focal_agent.layer;
+            let target_layer_probs = &layer_probability[focal_layer];
+            let layer_dist = WeightedIndex::new(target_layer_probs).unwrap();
+
+            let mut attempts = 0;
+
+            while attempts < max_attempts {
+                if !intralayer_stubs[focal_layer].contains(&focal_id)
+                    || *node_connections.get(&focal_id).unwrap_or(&0) >= focal_agent.degree
+                {
+                    break;
+                }
+
+                let target_layer = layer_dist.sample(rng);
+
+                if intralayer_stubs[target_layer].is_empty() {
+                    attempts += 1;
+                    continue;
+                }
+
+                let target_index = rng.gen_range(0..intralayer_stubs[target_layer].len());
+                let target_id = intralayer_stubs[target_layer][target_index];
+
+                if target_id != focal_id
+                    && !connection_pairs.contains(&(focal_id, target_id))
+                    && !connection_pairs.contains(&(target_id, focal_id))
+                {
+                    connection_pairs.insert((focal_id, target_id));
+
+                    intralayer_stubs[target_layer].remove(target_index);
+
+                    if let Some(focal_index) = intralayer_stubs[focal_layer]
+                        .iter()
+                        .position(|&id| id == focal_id)
+                    {
+                        intralayer_stubs[focal_layer].remove(focal_index);
+                    } else {
+                        println!(
+                            "Tried to remove focal_id: {} but it was not found in its layer",
+                            focal_id
+                        );
+                    }
+
+                    *node_connections.entry(focal_id).or_insert(0) += 1;
+                    *node_connections.entry(target_id).or_insert(0) += 1;
+                } else {
+                    attempts += 1;
+                }
+            }
+        }
+
+        for &(focal_id, target_id) in &connection_pairs {
+            if let Some(agent) = self.inner_mut().get_mut(focal_id) {
+                if !agent.neighbors.contains(&target_id) {
+                    agent.neighbors.push(target_id);
+                }
+            }
+            if let Some(agent) = self.inner_mut().get_mut(target_id) {
+                if !agent.neighbors.contains(&focal_id) {
+                    agent.neighbors.push(focal_id);
+                }
+            }
+        }
+    }
+
+    pub fn number_of_nodes(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub fn sample_degree_conditioned_to_layer(
+        &mut self,
+        intralayer_average_degree: &Vec<f64>,
+        rng: &mut ThreadRng,
+    ) {
+        for node in self.inner_mut() {
+            let layer = node.layer;
+            let average_degree = intralayer_average_degree[layer];
+            let standard_deviation = 4.0;
+            node.sample_degree_from_negative_binomial(average_degree, standard_deviation, rng);
+        }
+    }
+
+    pub fn sample_layer_from_cdf(&mut self, cdf: &Vec<f64>, rng: &mut ThreadRng) {
+        for node in self.inner_mut() {
+            node.sample_layer_from_cdf(cdf, rng);
+        }
+    }
+
+    pub fn to_adjacency_list(&self) {
+        todo!()
+    }
+
+    pub fn to_json(&self) {
+        todo!()
+    }
+
+    pub fn to_pickle(&self, uuid: &str, string_multilayer: &str, path_base: &str) {
+        let mut path = env::current_dir()
+            .expect("Failed to get current directory")
+            .join(path_base)
+            .join("data")
+            .join("temp")
+            .join(string_multilayer);
+
+        if !path.exists() {
+            fs::create_dir_all(&path).expect("Failed to create directory");
+        }
+
+        path.push(format!("{}.pickle", uuid));
+
+        let serialized = serde_pickle::to_vec(&self, SerOptions::new()).unwrap();
+        std::fs::write(path, serialized).unwrap();
     }
 }

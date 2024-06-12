@@ -1,0 +1,11 @@
+{
+    "age": false,
+    "agent": false,
+    "attitude": false,
+    "cluster": false,
+    "degree": false,
+    "global": true,
+    "time": false,
+    "rebuild": false
+}
+

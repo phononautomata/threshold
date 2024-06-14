@@ -20,7 +20,8 @@ use crate::cons::{
     HEADER_AGE, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_ATTITUDE,
     HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_DEGREE, HEADER_GLOBAL,
     HEADER_PROJECT, HEADER_TIME, HEADER_TIME_STATS, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE,
-    PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF, PATH_RESULTS_CURATED,
+    PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF,
+    PATH_RESULTS_CURATED,
 };
 
 #[derive(Clone, Copy, Serialize, Deserialize, Display, Debug, clap::ValueEnum, PartialEq, Eq)]
@@ -1005,7 +1006,7 @@ impl OutputEnsemble {
     pub fn filter_outbreaks(&mut self, nagents: usize, r0: f64) {
         let cutoff_fraction = PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF;
         let mut s: usize = 0;
-        let nsims = self.number_of_simulations() as usize;
+        let nsims = self.number_of_simulations();
         while s < nsims {
             let global_prevalence = self.inner()[s].global.prevalence;
             if (r0 > CONST_EPIDEMIC_THRESHOLD)
@@ -1477,7 +1478,7 @@ impl OutputEnsemble {
     }
 
     pub fn assemble_cluster_observables(&mut self) -> AssembledClusterOpinionHealthOutput {
-        let nsims = self.number_of_simulations() as usize;
+        let nsims = self.number_of_simulations();
 
         let mut as_clusters = vec![vec![]; nsims];
         let mut hs_clusters = vec![vec![]; nsims];
@@ -1754,7 +1755,7 @@ impl OutputEnsemble {
     }
 
     pub fn assemble_global_observables(&mut self) -> AssembledGlobalOutput {
-        let nsims = self.number_of_simulations() as usize;
+        let nsims = self.number_of_simulations();
         let mut convinced = vec![0; nsims];
         let mut convinced_at_peak = vec![0; nsims];
         let mut peak_incidence = vec![0; nsims];
@@ -1788,7 +1789,7 @@ impl OutputEnsemble {
     }
 
     pub fn assemble_time_series(&mut self, t_max: usize) -> AssembledTimeSeriesOutput {
-        let nsims = self.number_of_simulations() as usize;
+        let nsims = self.number_of_simulations();
         let mut ai_pop_st = vec![vec![0; t_max]; nsims];
         let mut ar_pop_st = vec![vec![0; t_max]; nsims];
         let mut as_pop_st = vec![vec![0; t_max]; nsims];
@@ -1800,7 +1801,7 @@ impl OutputEnsemble {
         let mut t_array_st = vec![vec![0; t_max]; nsims];
 
         for s in 0..nsims {
-            for t in 0..t_max as usize {
+            for t in 0..t_max {
                 t_array_st[s][t] = self.inner()[s].time.as_ref().unwrap().t_array[t];
                 as_pop_st[s][t] = self.inner()[s].time.as_ref().unwrap().as_pop_t[t];
                 hs_pop_st[s][t] = self.inner()[s].time.as_ref().unwrap().hs_pop_t[t];
@@ -2283,6 +2284,12 @@ pub struct ClusterDistribution {
     pub count_by_size: HashMap<usize, usize>,
 }
 
+impl Default for ClusterDistribution {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClusterDistribution {
     pub fn new() -> Self {
         Self {
@@ -2395,7 +2402,7 @@ pub fn build_normalized_cdf(values: &mut [f64]) -> Vec<f64> {
     cdf
 }
 
-pub fn build_normalized_layered_cdf(values: &mut Vec<Vec<f64>>) -> Vec<Vec<f64>> {
+pub fn build_normalized_layered_cdf(values: &mut [Vec<f64>]) -> Vec<Vec<f64>> {
     values
         .iter_mut()
         .map(|layer| {
@@ -2557,7 +2564,7 @@ fn compute_agent_sim_distribution(simulations: &Vec<Vec<f64>>) -> AgentDistribut
         .max_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap() as usize;
 
-    let bin_size = (max_value - min_value) / PAR_NBINS as usize;
+    let bin_size = (max_value - min_value) / PAR_NBINS;
     let bin_edges: Vec<usize> = (0..=PAR_NBINS).map(|i| min_value + i * bin_size).collect();
 
     let mut distribution = AgentDistribution::new(bin_edges.clone());
@@ -2740,8 +2747,8 @@ fn compute_cluster_stats(
 }
 
 fn compute_fractions(
-    numerators: &Vec<Vec<usize>>,
-    denominators: &Vec<Vec<usize>>,
+    numerators: &[Vec<usize>],
+    denominators: &[Vec<usize>],
 ) -> Vec<Vec<f64>> {
     numerators
         .iter()
@@ -2817,7 +2824,7 @@ pub fn construct_string_multilayer(model_region: Region, size: usize) -> String 
     format!("ml{0}_n{1}", size, model_region)
 }
 
-fn convert_to_f64(vec: &Vec<usize>) -> Vec<f64> {
+fn convert_to_f64(vec: &[usize]) -> Vec<f64> {
     vec.iter().map(|&value| value as f64).collect()
 }
 
@@ -2835,7 +2842,7 @@ pub fn compute_interlayer_probability_matrix(contact_matrix: &Vec<Vec<f64>>) -> 
 pub fn compute_intralayer_average_degree(contact_matrix: &Vec<Vec<f64>>) -> Vec<f64> {
     let mut intralayer_average_degree = vec![0.0; contact_matrix.len()];
 
-    for (alpha, row) in contact_matrix.into_iter().enumerate() {
+    for (alpha, row) in contact_matrix.iter().enumerate() {
         let sum: f64 = row.iter().sum();
         intralayer_average_degree[alpha] = sum;
     }
@@ -2891,7 +2898,7 @@ pub fn create_output_files(
 ) -> Result<HashMap<String, File>, std::io::Error> {
     let mut output_file_map: HashMap<String, File> = HashMap::new();
 
-    let base_path = PathBuf::from(env::current_dir()?).join(FOLDER_RESULTS);
+    let base_path = env::current_dir()?.join(FOLDER_RESULTS);
     let extension = EXTENSION_RESULTS;
 
     let outputs = vec![
@@ -2919,7 +2926,7 @@ pub fn load_json_config_to_input_multilayer(
     filename: &str,
     subfolder: Option<&str>,
 ) -> Result<InputMultilayer, Box<dyn std::error::Error>> {
-    let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
+    let mut path = env::current_dir().expect("Failed to get current directory");
 
     let subfolder = subfolder.unwrap_or("config");
     path.push(subfolder);
@@ -2946,7 +2953,7 @@ pub fn load_json_config_to_input_multilayer(
 }
 
 pub fn load_multilayer_object(path_multilayer: &PathBuf) -> Multilayer {
-    let file = File::open(&path_multilayer).expect("Unable to open file");
+    let file = File::open(path_multilayer).expect("Unable to open file");
     let r = BufReader::new(file);
     let options = DeOptions::new();
     let result: Result<Multilayer, _> = serde_pickle::from_reader(r, options);
@@ -3238,14 +3245,11 @@ pub fn measure_neighborhood(agent_id: usize, agent_ensemble: &mut AgentEnsemble,
         if threshold > 1.0 {
             zealots += 1;
         } else {
-            if status == Status::ActSus {
-                active_susceptible += 1;
-            } else if status == Status::ActVac {
-                vaccinated += 1;
-            } else if status == Status::ActRem {
-                prevalence += 1;
-            } else if status == Status::HesRem {
-                prevalence += 1;
+            match status {
+                Status::ActSus => active_susceptible += 1,
+                Status::ActVac => vaccinated += 1,
+                Status::ActRem | Status::HesRem => prevalence += 1,
+                _ => (),
             }
         }
     }
@@ -3263,7 +3267,7 @@ pub fn measure_neighborhood(agent_id: usize, agent_ensemble: &mut AgentEnsemble,
 }
 
 pub fn read_key_and_f64_from_json(state: Region, filename: &str) -> f64 {
-    let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
+    let mut path = env::current_dir().expect("Failed to get current directory");
     path.push("data");
     path.push(format!("{}.json", filename));
 
@@ -3282,7 +3286,8 @@ pub fn read_key_and_f64_from_json(state: Region, filename: &str) -> f64 {
 }
 
 pub fn read_key_and_matrixf64_from_json(state: Region, filename: &str) -> Vec<Vec<f64>> {
-    let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
+    let mut path = env::current_dir().expect("Failed to get current directory");
+
     path.push(FOLDER_DATA_RAW);
     path.push(format!("{}.json", filename));
 
@@ -3301,7 +3306,7 @@ pub fn read_key_and_matrixf64_from_json(state: Region, filename: &str) -> Vec<Ve
 }
 
 pub fn read_key_and_vecf64_from_json(state: Region, filename: &str) -> Vec<f64> {
-    let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
+    let mut path = env::current_dir().expect("Failed to get current directory");
     path.push(FOLDER_DATA_CUR);
     path.push(format!("{}.json", filename));
 

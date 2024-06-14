@@ -170,7 +170,7 @@ pub fn dynamical_loop(
         let attitude_cluster = measure_attitude_clusters(agent_ensemble);
         agent_ensemble.cascading_threshold();
         let cascading_cluster = measure_cascading_clusters(agent_ensemble);
-        let opinion_health_cluster = measure_opinion_health_clusters(&agent_ensemble);
+        let opinion_health_cluster = measure_opinion_health_clusters(agent_ensemble);
         output.cluster.as_mut().unwrap().attitude = Some(attitude_cluster);
         output.cluster.as_mut().unwrap().cascading = Some(cascading_cluster);
         output.cluster.as_mut().unwrap().opinion_health = Some(opinion_health_cluster);
@@ -330,12 +330,7 @@ fn watts_threshold_step_agent(agent_id: usize, agent_ensemble: &AgentEnsemble) -
     let vaccinated_fraction = vaccinated_neighbors / k as f64;
 
     if vaccinated_fraction >= agent_ensemble.inner()[agent_id].threshold {
-        match status {
-            Status::HesSus => true,
-            Status::HesInf => true,
-            Status::HesRem => true,
-            _ => false,
-        }
+        matches!(status, Status::HesSus | Status::HesInf | Status::HesRem)
     } else {
         false
     }

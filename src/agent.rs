@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 use rand::Rng;
 use rand::{distributions::WeightedIndex, prelude::*};
@@ -197,7 +197,7 @@ impl Agent {
     pub fn new_from_node(layer: usize, degree: usize, id: usize, neighbors: Vec<usize>) -> Self {
         Self {
             age: layer,
-            degree: degree,
+            degree,
             health: Health::Susceptible,
             id,
             neighbors,
@@ -253,8 +253,7 @@ impl Agent {
             cumulative_neighbor_threshold += neigh_threshold;
         }
 
-        let average_neighbor_threshold = cumulative_neighbor_threshold / (degree as f64);
-        average_neighbor_threshold
+        cumulative_neighbor_threshold / (degree as f64)
     }
 
     pub fn measure_cascading_threshold(&mut self, agent_ensemble: &mut AgentEnsemble) -> usize {
@@ -301,24 +300,22 @@ impl Agent {
         let mut prevalence = 0;
 
         for neigh in neighbors {
-            let status = agent_ensemble.inner()[neigh].status;
-            let neigh_threshold = agent_ensemble.inner()[neigh].threshold;
-
+            let agent = &agent_ensemble.inner()[neigh];
+            let status = agent.status;
+            let neigh_threshold = agent.threshold;
+        
             if neigh_threshold < threshold {
                 cascading_count += 1;
             }
-
+        
             if neigh_threshold >= 1.0 {
                 zealots += 1;
             } else {
-                if status == Status::ActSus {
-                    active_susceptible += 1;
-                } else if status == Status::ActVac {
-                    vaccinated += 1;
-                } else if status == Status::ActRem {
-                    prevalence += 1;
-                } else if status == Status::HesRem {
-                    prevalence += 1;
+                match status {
+                    Status::ActSus => active_susceptible += 1,
+                    Status::ActVac => vaccinated += 1,
+                    Status::ActRem | Status::HesRem => prevalence += 1,
+                    _ => (),
                 }
             }
         }
@@ -360,12 +357,12 @@ impl Agent {
         vaccinated_neighbors as f64 / k as f64
     }
 
-    fn sample_age(&mut self, cdf: &Vec<f64>) {
+    fn sample_age(&mut self, cdf: &[f64]) {
         let mut rng = rand::thread_rng();
         self.age = sample_from_cdf(cdf, &mut rng)
     }
 
-    fn sample_degree(&mut self, cdf: &Vec<f64>) {
+    fn sample_degree(&mut self, cdf: &[f64]) {
         let mut rng = rand::thread_rng();
         self.degree = sample_from_cdf(cdf, &mut rng)
     }
@@ -828,8 +825,8 @@ impl AgentEnsemble {
 
     pub fn generate_age_multilayer_network(
         &mut self,
-        layer_probability: &Vec<Vec<f64>>,
-        intralayer_stubs: &mut Vec<Vec<usize>>,
+        layer_probability: &[Vec<f64>],
+        intralayer_stubs: &mut [Vec<usize>],
     ) {
         let mut rng = rand::thread_rng();
         let mut connection_pairs = HashSet::new();
@@ -1690,19 +1687,19 @@ impl AgentEnsemble {
         }
     }
 
-    pub fn sample_age(&mut self, cdf: &Vec<f64>) {
+    pub fn sample_age(&mut self, cdf: &[f64]) {
         for agent in self.inner_mut() {
             agent.sample_age(cdf);
         }
     }
 
-    pub fn sample_degree(&mut self, cdf: &Vec<f64>) {
+    pub fn sample_degree(&mut self, cdf: &[f64]) {
         for agent in self.inner_mut() {
             agent.sample_degree(cdf);
         }
     }
 
-    pub fn sample_degree_conditioned_to_age(&mut self, intralayer_average_degree: &Vec<f64>) {
+    pub fn sample_degree_conditioned_to_age(&mut self, intralayer_average_degree: &[f64]) {
         for agent in self.inner_mut() {
             let age = agent.age;
             let average_degree = intralayer_average_degree[age];
@@ -2081,7 +2078,7 @@ impl Node {
         self.degree = degree;
     }
 
-    fn sample_layer_from_cdf(&mut self, cdf: &Vec<f64>, rng: &mut ThreadRng) {
+    fn sample_layer_from_cdf(&mut self, cdf: &[f64], rng: &mut ThreadRng) {
         self.layer = sample_from_cdf(cdf, rng)
     }
 }
@@ -2137,8 +2134,8 @@ impl Multilayer {
 
     pub fn generate_multilayer_network(
         &mut self,
-        layer_probability: &Vec<Vec<f64>>,
-        intralayer_stubs: &mut Vec<Vec<usize>>,
+        layer_probability: &[Vec<f64>],
+        intralayer_stubs: &mut [Vec<usize>],
         rng: &mut ThreadRng,
     ) {
         let mut connection_pairs = HashSet::new();
@@ -2218,7 +2215,7 @@ impl Multilayer {
 
     pub fn sample_degree_conditioned_to_layer(
         &mut self,
-        intralayer_average_degree: &Vec<f64>,
+        intralayer_average_degree: &[f64],
         rng: &mut ThreadRng,
     ) {
         for node in self.inner_mut() {
@@ -2229,7 +2226,7 @@ impl Multilayer {
         }
     }
 
-    pub fn sample_layer_from_cdf(&mut self, cdf: &Vec<f64>, rng: &mut ThreadRng) {
+    pub fn sample_layer_from_cdf(&mut self, cdf: &[f64], rng: &mut ThreadRng) {
         for node in self.inner_mut() {
             node.sample_layer_from_cdf(cdf, rng);
         }
@@ -2243,9 +2240,14 @@ impl Multilayer {
         todo!()
     }
 
-    pub fn to_pickle(&self, uuid: &str, string_multilayer: &str, model_region: &str, path_base: &str) {
-        let mut path = PathBuf::from(path_base)
-            .join(model_region);
+    pub fn to_pickle(
+        &self,
+        uuid: &str,
+        string_multilayer: &str,
+        model_region: &str,
+        path_base: &str,
+    ) {
+        let mut path = PathBuf::from(path_base).join(model_region);
 
         if !path.exists() {
             fs::create_dir_all(&path).expect("Failed to create directory");

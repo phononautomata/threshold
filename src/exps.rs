@@ -17,8 +17,8 @@ use crate::utils::{
     build_normalized_cdf, compute_interlayer_probability_matrix, compute_intralayer_average_degree,
     construct_string_epidemic, construct_string_multilayer, count_underaged,
     load_json_config_to_input_multilayer, load_multilayer_object, read_key_and_matrixf64_from_json,
-    read_key_and_vecf64_from_json, rebuild_contact_data_from_multilayer, InputMultilayer, OutputEnsemble,
-    OutputFlags, Region, VaccinationPars,
+    read_key_and_vecf64_from_json, rebuild_contact_data_from_multilayer, InputMultilayer,
+    OutputEnsemble, OutputFlags, Region, VaccinationPars,
 };
 
 #[derive(Parser, Debug)]
@@ -131,14 +131,19 @@ pub fn generate_multilayer(args: Args) {
     let string_multilayer = construct_string_multilayer(args.model_region, args.nagents);
     let path_base = PATH_DATA_MULTILAYER;
 
-    node_ensemble.to_pickle(&uuid_ml, &string_multilayer, &args.model_region.to_string(), &path_base);
+    node_ensemble.to_pickle(
+        &uuid_ml,
+        &string_multilayer,
+        &args.model_region.to_string(),
+        path_base,
+    );
 
     if args.flag_output_contact {
         let output_contact = rebuild_contact_data_from_multilayer(&node_ensemble);
 
         let serialized = serde_pickle::to_vec(&output_contact, SerOptions::new()).unwrap();
 
-        let mut path = PathBuf::from(env::current_dir().expect("Failed to get current directory"));
+        let mut path = env::current_dir().expect("Failed to get current directory");
         path.push(FOLDER_RESULTS);
         path.push(format!(
             "contact_{}_{}{}",
@@ -183,7 +188,10 @@ pub fn run_epidemic(args: Args) {
     let path_base = PATH_DATA_MULTILAYER;
     let path_multilayer = PathBuf::from(path_base)
         .join(args.model_region.to_string())
-        .join(format!("ml{}_n{}_{}.pickle", args.model_region, args.nagents, args.uuid_multilayer));
+        .join(format!(
+            "ml{}_n{}_{}.pickle",
+            args.model_region, args.nagents, args.uuid_multilayer
+        ));
 
     let node_ensemble = load_multilayer_object(&path_multilayer);
     let nagents = node_ensemble.number_of_nodes();
@@ -215,11 +223,6 @@ pub fn run_epidemic(args: Args) {
 
         pars_model.fraction_active = pars_model.fraction_vaccinated + pars_model.fraction_soon;
         pars_model.threshold_opinion = 0.0;
-        pars_model.fraction_zealot = pars_model.fraction_zealot;
-    } else {
-        pars_model.fraction_active = pars_model.fraction_active;
-        pars_model.threshold_opinion = pars_model.threshold_opinion;
-        pars_model.fraction_zealot = pars_model.fraction_zealot;
     }
 
     let r0 = pars_model.r0;

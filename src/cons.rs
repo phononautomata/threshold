@@ -59,3 +59,7 @@ pub const PAR_NBINS: usize = 30;
 pub const PAR_NETWORK_TRIALS: usize = 100;
 pub const PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF: f64 = 0.0;
 pub const PAR_TIME_STEP: usize = 1;
+
+pub const PATH_DATA_MULTILAYER: &str = "/data/alfonso/threshold/data/curated/networks";
+pub const PATH_RESULTS_TEMP: &str = "/data/alfonso/threshold/results/temp";
+pub const PATH_RESULTS_CURATED: &str = "/data/alfonso/threshold/results/curated";

@@ -20,7 +20,7 @@ use crate::cons::{
     HEADER_AGE, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_ATTITUDE,
     HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_DEGREE, HEADER_GLOBAL,
     HEADER_PROJECT, HEADER_TIME, HEADER_TIME_STATS, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE,
-    PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF,
+    PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF, PATH_RESULTS_CURATED,
 };
 
 #[derive(Clone, Copy, Serialize, Deserialize, Display, Debug, clap::ValueEnum, PartialEq, Eq)]
@@ -1842,9 +1842,7 @@ impl OutputEnsemble {
                 HEADER_AGE, string_multilayer, string_epidemic, uuid_multilayer,
             );
 
-            let mut path =
-                PathBuf::from(env::current_dir().expect("Failed to get current directory"));
-            path.push(FOLDER_RESULTS);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, serialized).unwrap();
         }
@@ -1862,9 +1860,7 @@ impl OutputEnsemble {
                 HEADER_AGENT_STATS, string_multilayer, string_epidemic, uuid_multilayer,
             );
 
-            let mut path =
-                PathBuf::from(env::current_dir().expect("Failed to get current directory"));
-            path.push(FOLDER_RESULTS);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, asp_serialized).unwrap();
 
@@ -1878,9 +1874,7 @@ impl OutputEnsemble {
                 HEADER_AGENT_DISTRIBUTION, string_multilayer, string_epidemic, uuid_multilayer,
             );
 
-            let mut path =
-                PathBuf::from(env::current_dir().expect("Failed to get current directory"));
-            path.push(FOLDER_RESULTS);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, ad_serialized).unwrap();
         }
@@ -1900,9 +1894,7 @@ impl OutputEnsemble {
                 HEADER_ATTITUDE, string_multilayer, string_epidemic, uuid_multilayer,
             );
 
-            let mut path =
-                PathBuf::from(env::current_dir().expect("Failed to get current directory"));
-            path.push(FOLDER_RESULTS);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, serialized).unwrap();
         }
@@ -1919,9 +1911,7 @@ impl OutputEnsemble {
                 HEADER_CLUSTER_STATS, string_multilayer, string_epidemic, uuid_multilayer,
             );
 
-            let mut path =
-                PathBuf::from(env::current_dir().expect("Failed to get current directory"));
-            path.push(FOLDER_RESULTS);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, csp_serialized).unwrap();
 
@@ -1935,9 +1925,7 @@ impl OutputEnsemble {
                 HEADER_CLUSTER_DISTRIBUTION, string_multilayer, string_epidemic, uuid_multilayer,
             );
 
-            let mut path =
-                PathBuf::from(env::current_dir().expect("Failed to get current directory"));
-            path.push(FOLDER_RESULTS);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, cd_serialized).unwrap();
         }
@@ -1957,9 +1945,7 @@ impl OutputEnsemble {
                 string_multilayer, string_epidemic, uuid_multilayer,
             );
 
-            let mut path =
-                PathBuf::from(env::current_dir().expect("Failed to get current directory"));
-            path.push(FOLDER_RESULTS);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, serialized).unwrap();
         }
@@ -1979,9 +1965,7 @@ impl OutputEnsemble {
                 HEADER_GLOBAL, string_multilayer, string_epidemic, uuid_multilayer,
             );
 
-            let mut path =
-                PathBuf::from(env::current_dir().expect("Failed to get current directory"));
-            path.push(FOLDER_RESULTS);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, serialized).unwrap();
         }
@@ -1997,9 +1981,7 @@ impl OutputEnsemble {
                 HEADER_TIME, string_multilayer, string_epidemic, uuid_multilayer,
             );
 
-            let mut path =
-                PathBuf::from(env::current_dir().expect("Failed to get current directory"));
-            path.push(FOLDER_RESULTS);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, serialized).unwrap();
         }

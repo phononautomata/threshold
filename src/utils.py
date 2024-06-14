@@ -296,7 +296,11 @@ def extract_code_from_state(state):
 
     return state_code_dict[state]
 
-def extract_failed_outbreaks(prevalence_distribution, prevalence_cutoff=0.0, n=None):
+def extract_failed_outbreaks(
+        prevalence_distribution, 
+        prevalence_cutoff=0.0, 
+        n=None,
+        ):
     if np.any(prevalence_distribution > 1.0):
         prevalence_distribution /= n
     failed_outbreaks = np.where(prevalence_distribution < prevalence_cutoff)[0]
@@ -375,7 +379,12 @@ def filter_global_output(output_dict, n, prevalence_cutoff):
 
     return filtered_dist
 
-def filter_stratified_attribute_output(output_dict, n, prevalence_cutoff, norm_age_flag=False):
+def filter_stratified_attribute_output(
+        output_dict, 
+        n, 
+        prevalence_cutoff, 
+        norm_age_flag=False,
+        ):
     norm_dist = {key: (np.array(val) / n if ('time' not in key and 'when' not in key) else np.array(val)) 
                  for key, val in output_dict.items()}
 
@@ -598,13 +607,19 @@ def stat_global_output(output_dict):
 def stat_observable(observable_dist):
     return compute_distribution_statistics(observable_dist)
 
-def stat_stratified_attribute_observable_array(observable_distribution, attribute='age'):
+def stat_stratified_attribute_observable_array(
+        observable_distribution, 
+        attribute='age',
+        ):
     stat_dict = {}
     for age, value_a in enumerate(observable_distribution.T):
             stat_dict[age] = compute_distribution_statistics(value_a)
     return stat_dict
 
-def stat_stratified_attribute_observable_list(observable_distribution_list, attribute='age'):
+def stat_stratified_attribute_observable_list(
+        observable_distribution_list, 
+        attribute='age',
+        ):
     z = 1.96
     nan_threshold = 10000000
 
@@ -678,7 +693,13 @@ def update_contact_matrix(contact, old_pop_a, new_pop_a):
 
     return new_contact
 
-def write_annotations_vaccination_curves(state_abb, ax, var_values, vacc_avg, prev_avg):
+def write_annotations_vaccination_curves(
+        state_abb, 
+        ax, 
+        var_values, 
+        vacc_avg, 
+        prev_avg,
+        ):
     if state_abb == 'AK':
         ax[1].annotate(
             state_abb, 

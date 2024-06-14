@@ -1,7 +1,15 @@
 #!/bin/bash
 
-# Define the states as an array
-states=(
+#base_path="/Users/alfonso/workshop/threshold"
+base_path="$HOME/threshold"
+script_folder="scripts"
+
+if [ -z "$base_path" ]; then
+    echo "The THRESHOLD_PATH environment variable is not set. Please set it to the base path of the expidemics project."
+    exit 1
+fi
+
+list_model_region=(
     alabama
     alaska
     arizona
@@ -55,12 +63,11 @@ states=(
     national
 )
 
-# Define the vaccination rates
-vaccination_rates="0.005 0.01 0.05"
+size=100000
+n_repeats=25
 
-# Generate the combination of arguments for GNU Parallel
-for state in "${states[@]}"; do
-    for rate in "${vaccination_rates[@]}"; do
-        echo "$state $rate"
+for region in "${list_model_region[@]}"; do
+    for ((i=1; i<=n_repeats; i++)); do
+        echo "$region $size"
     done
-done | parallel --colsep ' ' --jobs 60 --progress --nice 10 /Users/alfonso/workshop/threshold/src/launch_threshold_us.sh {1} {2}
+done | parallel --colsep ' ' --jobs 25 --progress --nice 10 "${base_path}/${script_folder}/launch_multilayer.sh" {1} {2}

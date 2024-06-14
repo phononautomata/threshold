@@ -10,7 +10,7 @@ use crate::agent::{
 };
 use crate::cons::{
     EXTENSION_RESULTS, FILENAME_CONFIG, FILENAME_DATA_CONTACT_MATRIX, FILENAME_DATA_POPULATION_AGE,
-    FILENAME_DATA_VACCINATION_ATTITUDE, FOLDER_CONFIG, FOLDER_RESULTS,
+    FILENAME_DATA_VACCINATION_ATTITUDE, FOLDER_CONFIG, FOLDER_RESULTS, PATH_DATA_MULTILAYER,
 };
 use crate::core::dynamical_loop;
 use crate::utils::{
@@ -93,7 +93,7 @@ pub struct Args {
     #[clap(
         long,
         value_parser,
-        default_value = "47f7d63f-005a-4c49-97e0-776986135c84"
+        default_value = "mlMassachusetts_n100000_47f7d63f-005a-4c49-97e0-776986135c84"
     )]
     pub uuid_multilayer: String,
 }
@@ -129,9 +129,9 @@ pub fn generate_multilayer(args: Args) {
 
     let uuid_ml = Uuid::new_v4().to_string();
     let string_multilayer = construct_string_multilayer(args.model_region, args.nagents);
-    let path_base = "../../data/alfonso/threshold/";
+    let path_base = PATH_DATA_MULTILAYER;
 
-    node_ensemble.to_pickle(&uuid_ml, &string_multilayer, &path_base);
+    node_ensemble.to_pickle(&uuid_ml, &string_multilayer, &args.model_region.to_string(), &path_base);
 
     if args.flag_output_contact {
         let output_contact = rebuild_contact_data_from_multilayer(&node_ensemble);
@@ -180,17 +180,10 @@ pub fn run_epidemic(args: Args) {
 
     let string_multilayer = construct_string_multilayer(args.model_region, args.nagents);
 
-    let path_base = "../../data/alfonso/threshold/";
-
-    let current_dir = env::current_dir().expect("Failed to get current directory");
-    let path = current_dir
-        .parent()
-        .expect("Failed to get parent directory")
-        .join(path_base)
-        .join("data")
-        .join("threshold")
-        .join(&string_multilayer);
-    let path_multilayer = path.join(format!("{}.pickle", args.uuid_multilayer));
+    let path_base = PATH_DATA_MULTILAYER;
+    let path_multilayer = PathBuf::from(path_base)
+        .join(args.model_region.to_string())
+        .join(format!("ml{}_n{}_{}.pickle", args.model_region, args.nagents, args.uuid_multilayer));
 
     let node_ensemble = load_multilayer_object(&path_multilayer);
     let nagents = node_ensemble.number_of_nodes();

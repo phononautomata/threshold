@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::{env, fs};
+use std::path::PathBuf;
+use std::fs;
 
 use rand::Rng;
 use rand::{distributions::WeightedIndex, prelude::*};
@@ -2242,19 +2243,15 @@ impl Multilayer {
         todo!()
     }
 
-    pub fn to_pickle(&self, uuid: &str, string_multilayer: &str, path_base: &str) {
-        let mut path = env::current_dir()
-            .expect("Failed to get current directory")
-            .join(path_base)
-            .join("data")
-            .join("temp")
-            .join(string_multilayer);
+    pub fn to_pickle(&self, uuid: &str, string_multilayer: &str, model_region: &str, path_base: &str) {
+        let mut path = PathBuf::from(path_base)
+            .join(model_region);
 
         if !path.exists() {
             fs::create_dir_all(&path).expect("Failed to create directory");
         }
 
-        path.push(format!("{}.pickle", uuid));
+        path.push(format!("{}_{}.pickle", string_multilayer, uuid));
 
         let serialized = serde_pickle::to_vec(&self, SerOptions::new()).unwrap();
         std::fs::write(path, serialized).unwrap();

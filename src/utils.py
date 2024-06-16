@@ -429,47 +429,68 @@ def get_state_list():
               'North_Dakota', 'Ohio', 'Oklahoma', 'Oregon', 
               'Pennsylvania', 'Rhode_Island', 'South_Carolina', 'South_Dakota', 
               'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 
-              'Washington', 'West_Virginia', 'Wisconsin', 'Wyoming']
+              'Washington', 'West_Virginia', 'Wisconsin', 'Wyoming', 'National']
 
 def import_age_distribution(
         state, 
         path=cwd_path, 
-        lower_path='data', 
+        lower_path='data/raw', 
         country=default_country, 
         reference=True, 
         year=default_year,
         norm_flag=False,
         ):
     if reference == True:
-        file_name = country + '_subnational_' + state + '_age_distribution_85'
+        if state == 'National':
+            file_name = country + '_country_level_' + 'age_distribution_85' 
+        else:
+            file_name = country + '_subnational_' + state + '_age_distribution_85'
         extension = '.csv'
         full_name = os.path.join(path, lower_path, file_name + extension)
 
         age_df = pd.read_csv(full_name, header=None)
 
-        #pop_a = np.zeros(len(age_df.values.T[1]), dtype=float)
         pop_a = age_df.values.T[1]
     else:
-        file_name = str(year) + '_' + country + '_subnational_' + state + '_age_distribution_85'
-        extension = '.xlsx'
-        full_name = os.path.join(path, lower_path, file_name + extension)
+        if state == 'National':
+            file_name = str(year) + '_' + country + '_country_level_' + 'age_distribution_85'
+            extension = '.xlsx'
+            full_name = os.path.join(path, lower_path, file_name + extension)
 
-        full_age_df = pd.read_excel(full_name)
+            full_age_df = pd.read_excel(full_name)
 
-        age_df = full_age_df['Unnamed: 34'][5:90].values
-        merge_older = full_age_df['Unnamed: 34'][89] + full_age_df['Unnamed: 34'][90]
-        age_df[-1] = merge_older
+            age_df = full_age_df['Unnamed: 12'][4:89].values
+            merge_older = np.sum(full_age_df['Unnamed: 12'][88:105].values)
+            age_df[-1] = merge_older
 
-        pop_a = np.zeros(len(age_df), dtype=float)
-        for a in range(len(age_df)):
-            pop_a[a] = age_df[a]
+            pop_a = np.zeros(len(age_df), dtype=float)
+            for a in range(len(age_df)):
+                pop_a[a] = age_df[a]
+
+        else:
+            file_name = str(year) + '_' + country + '_subnational_' + state + '_age_distribution_85'
+            extension = '.xlsx'
+            full_name = os.path.join(path, lower_path, file_name + extension)
+
+            full_age_df = pd.read_excel(full_name)
+
+            age_df = full_age_df['Unnamed: 34'][5:90].values
+            merge_older = full_age_df['Unnamed: 34'][89] + full_age_df['Unnamed: 34'][90]
+            age_df[-1] = merge_older
+
+            pop_a = np.zeros(len(age_df), dtype=float)
+            for a in range(len(age_df)):
+                pop_a[a] = age_df[a]
 
     if norm_flag:
         pop_a /= np.sum(pop_a)
 
     return pop_a
 
-def import_age_vaccination_attitudes(path=cwd_path, lower_path='data'):
+def import_age_vaccination_attitudes(
+        path=cwd_path, 
+        lower_path='data/raw',
+        ):
     file_name = 'vaccination_attitude_fraction_by_age'
     extension = '.csv'
     full_name = os.path.join(path, lower_path, file_name + extension)
@@ -481,10 +502,13 @@ def import_age_vaccination_attitudes(path=cwd_path, lower_path='data'):
 def import_contact_matrix(
         state, 
         path=cwd_path, 
-        lower_path='data', 
+        lower_path='data/raw', 
         country=default_country
         ):
-    file_name = country + '_subnational_' + state + '_M_overall_contact_matrix_85'
+    if state == 'National':
+        file_name = country + '_country_level_' + 'M_overall_contact_matrix_85'
+    else:
+        file_name = country + '_subnational_' + state + '_M_overall_contact_matrix_85'
     extension = '.csv'
     full_name = os.path.join(path, lower_path, file_name + extension)
 

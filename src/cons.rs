@@ -19,10 +19,10 @@ pub const FLAG_VERBOSE: bool = false;
 pub const FILENAME_CONFIG: &str = "config";
 pub const FILENAME_DATA_AVERAGE_CONTACT: &str = "average_contacts_data";
 pub const FILENAME_DATA_CONTACT_AGE: &str = "contacts_age_data";
-pub const FILENAME_DATA_CONTACT_MATRIX: &str = "contact_matrix_data";
+pub const FILENAME_DATA_CONTACT_MATRIX: &str = "state_contact_matrix";
 pub const FILENAME_DATA_DEGREE: &str = "norm_degree_data";
 pub const FILENAME_DATA_POPULATION: &str = "population_data";
-pub const FILENAME_DATA_POPULATION_AGE: &str = "norm_population_age_data";
+pub const FILENAME_DATA_POPULATION_AGE: &str = "state_population_age";
 pub const FILENAME_DATA_VACCINATION_ATTITUDE: &str = "vaccination_attitude_data";
 
 pub const FOLDER_CONFIG: &str = "config";
@@ -60,6 +60,8 @@ pub const PAR_NETWORK_TRIALS: usize = 100;
 pub const PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF: f64 = 0.0;
 pub const PAR_TIME_STEP: usize = 1;
 
-pub const PATH_DATA_MULTILAYER: &str = "/data/alfonso/threshold/data/curated/networks";
+pub const PATH_DATA_MULTILAYER_PEPINO: &str = "/data/alfonso/threshold/data/curated/networks";
+pub const PATH_DATA_MULTILAYER_LOCAL: &str = "/Users/alfonso/workshop/threshold/data/curated/networks";
 pub const PATH_RESULTS_TEMP: &str = "/data/alfonso/threshold/results/temp";
-pub const PATH_RESULTS_CURATED: &str = "/data/alfonso/threshold/results/curated";
+pub const PATH_RESULTS_CURATED_PEPINO: &str = "/data/alfonso/threshold/results/curated";
+pub const PATH_RESULTS_CURATED_LOCAL: &str = "/Users/alfonso/workshp/threshold/results/curated";

@@ -16,12 +16,12 @@ use crate::agent::{
     VaccinationPolicy,
 };
 use crate::cons::{
-    CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS, FOLDER_DATA_CUR, FOLDER_DATA_RAW, FOLDER_RESULTS,
+    CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS, FOLDER_DATA_CUR, FOLDER_RESULTS,
     HEADER_AGE, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_ATTITUDE,
     HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_DEGREE, HEADER_GLOBAL,
     HEADER_PROJECT, HEADER_TIME, HEADER_TIME_STATS, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE,
     PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF,
-    PATH_RESULTS_CURATED,
+    PATH_RESULTS_CURATED_LOCAL,
 };
 
 #[derive(Clone, Copy, Serialize, Deserialize, Display, Debug, clap::ValueEnum, PartialEq, Eq)]
@@ -1826,7 +1826,6 @@ impl OutputEnsemble {
         flags_output: &OutputFlags,
         string_epidemic: &str,
         string_multilayer: &str,
-        uuid_multilayer: &str,
     ) {
         if flags_output.age {
             let assembled_age_output = self.assemble_age_observables();
@@ -1839,11 +1838,11 @@ impl OutputEnsemble {
             let serialized = serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
 
             let string_result = format!(
-                "{}_{}_{}_{}",
-                HEADER_AGE, string_multilayer, string_epidemic, uuid_multilayer,
+                "{}_{}_{}",
+                HEADER_AGE, string_multilayer, string_epidemic
             );
 
-            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, serialized).unwrap();
         }
@@ -1857,11 +1856,11 @@ impl OutputEnsemble {
                 serde_pickle::to_vec(&agent_stat_package, SerOptions::new()).unwrap();
 
             let string_result = format!(
-                "{}_{}_{}_{}",
-                HEADER_AGENT_STATS, string_multilayer, string_epidemic, uuid_multilayer,
+                "{}_{}_{}",
+                HEADER_AGENT_STATS, string_multilayer, string_epidemic,
             );
 
-            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, asp_serialized).unwrap();
 
@@ -1871,11 +1870,11 @@ impl OutputEnsemble {
                 serde_pickle::to_vec(&agent_distribution, SerOptions::new()).unwrap();
 
             let string_result = format!(
-                "{}_{}_{}_{}",
-                HEADER_AGENT_DISTRIBUTION, string_multilayer, string_epidemic, uuid_multilayer,
+                "{}_{}_{}",
+                HEADER_AGENT_DISTRIBUTION, string_multilayer, string_epidemic
             );
 
-            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, ad_serialized).unwrap();
         }
@@ -1891,11 +1890,11 @@ impl OutputEnsemble {
             let serialized = serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
 
             let string_result = format!(
-                "{}_{}_{}_{}",
-                HEADER_ATTITUDE, string_multilayer, string_epidemic, uuid_multilayer,
+                "{}_{}_{}",
+                HEADER_ATTITUDE, string_multilayer, string_epidemic
             );
 
-            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, serialized).unwrap();
         }
@@ -1908,11 +1907,11 @@ impl OutputEnsemble {
                 serde_pickle::to_vec(&cluster_stat_package, SerOptions::new()).unwrap();
 
             let string_result = format!(
-                "{}_{}_{}_{}",
-                HEADER_CLUSTER_STATS, string_multilayer, string_epidemic, uuid_multilayer,
+                "{}_{}_{}",
+                HEADER_CLUSTER_STATS, string_multilayer, string_epidemic,
             );
 
-            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, csp_serialized).unwrap();
 
@@ -1922,11 +1921,11 @@ impl OutputEnsemble {
                 serde_pickle::to_vec(&cluster_distribution, SerOptions::new()).unwrap();
 
             let string_result = format!(
-                "{}_{}_{}_{}",
-                HEADER_CLUSTER_DISTRIBUTION, string_multilayer, string_epidemic, uuid_multilayer,
+                "{}_{}_{}",
+                HEADER_CLUSTER_DISTRIBUTION, string_multilayer, string_epidemic
             );
 
-            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, cd_serialized).unwrap();
         }
@@ -1942,11 +1941,11 @@ impl OutputEnsemble {
             let serialized = serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
 
             let string_result = format!(
-                "degree_{}_{}_{}",
-                string_multilayer, string_epidemic, uuid_multilayer,
+                "degree_{}_{}",
+                string_multilayer, string_epidemic
             );
 
-            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, serialized).unwrap();
         }
@@ -1962,11 +1961,11 @@ impl OutputEnsemble {
             let serialized = serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
 
             let string_result = format!(
-                "{}_{}_{}_{}",
-                HEADER_GLOBAL, string_multilayer, string_epidemic, uuid_multilayer,
+                "{}_{}_{}",
+                HEADER_GLOBAL, string_multilayer, string_epidemic
             );
 
-            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, serialized).unwrap();
         }
@@ -1978,11 +1977,11 @@ impl OutputEnsemble {
                 serde_pickle::to_vec(&assembled_time_series, SerOptions::new()).unwrap();
 
             let string_result = format!(
-                "{}_{}_{}_{}",
-                HEADER_TIME, string_multilayer, string_epidemic, uuid_multilayer,
+                "{}_{}_{}",
+                HEADER_TIME, string_multilayer, string_epidemic
             );
 
-            let mut path = PathBuf::from(PATH_RESULTS_CURATED);
+            let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
             std::fs::write(path, serialized).unwrap();
         }
@@ -2821,7 +2820,7 @@ pub fn construct_string_epidemic(model_pars: &InputMultilayer) -> String {
 }
 
 pub fn construct_string_multilayer(model_region: Region, size: usize) -> String {
-    format!("ml{0}_n{1}", size, model_region)
+    format!("ml{0}_n{1}", model_region, size)
 }
 
 fn convert_to_f64(vec: &[usize]) -> Vec<f64> {
@@ -3288,7 +3287,7 @@ pub fn read_key_and_f64_from_json(state: Region, filename: &str) -> f64 {
 pub fn read_key_and_matrixf64_from_json(state: Region, filename: &str) -> Vec<Vec<f64>> {
     let mut path = env::current_dir().expect("Failed to get current directory");
 
-    path.push(FOLDER_DATA_RAW);
+    path.push(FOLDER_DATA_CUR);
     path.push(format!("{}.json", filename));
 
     let mut file = File::open(&path).unwrap();

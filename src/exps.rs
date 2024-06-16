@@ -10,7 +10,7 @@ use crate::agent::{
 };
 use crate::cons::{
     EXTENSION_RESULTS, FILENAME_CONFIG, FILENAME_DATA_CONTACT_MATRIX, FILENAME_DATA_POPULATION_AGE,
-    FILENAME_DATA_VACCINATION_ATTITUDE, FOLDER_CONFIG, FOLDER_RESULTS, PATH_DATA_MULTILAYER,
+    FILENAME_DATA_VACCINATION_ATTITUDE, FOLDER_CONFIG, FOLDER_RESULTS, PATH_DATA_MULTILAYER_LOCAL,
 };
 use crate::core::dynamical_loop;
 use crate::utils::{
@@ -28,19 +28,19 @@ pub struct Args {
     pub flag_config: bool,
     #[clap(long, value_parser, default_value_t = true)]
     pub flag_output_age: bool,
-    #[clap(long, value_parser, default_value_t = true)]
+    #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_agent: bool,
-    #[clap(long, value_parser, default_value_t = true)]
+    #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_attitude: bool,
-    #[clap(long, value_parser, default_value_t = true)]
+    #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_cluster: bool,
-    #[clap(long, value_parser, default_value_t = true)]
+    #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_contact: bool,
-    #[clap(long, value_parser, default_value_t = true)]
+    #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_degree: bool,
     #[clap(long, value_parser, default_value_t = true)]
     pub flag_output_global: bool,
-    #[clap(long, value_parser, default_value_t = true)]
+    #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_time: bool,
     #[clap(long, value_parser, default_value_t = true)]
     pub flag_underage: bool,
@@ -56,23 +56,23 @@ pub struct Args {
     pub fraction_vaccinated: f64,
     #[clap(long, value_parser, default_value_t = 0.0)]
     pub fraction_zealot: f64,
-    #[clap(long, value_parser, default_value_t = 3)]
+    #[clap(long, value_parser, default_value_t = 1)]
     pub id_experiment: usize,
     #[clap(long, value_parser, default_value = "random")]
     pub model_hesitancy: HesitancyModel,
-    #[clap(long, value_parser, default_value = "homogeneous")]
+    #[clap(long, value_parser, default_value = "homogeneous-thresholds")]
     pub model_opinion: OpinionModel,
-    #[clap(long, value_parser, default_value = "massachusetts")]
+    #[clap(long, value_parser, default_value = "west-virginia")]
     pub model_region: Region,
     #[clap(long, value_parser, default_value = "top-degree-neighborhood")]
     pub model_seed: SeedModel,
-    #[clap(long, value_parser, default_value_t = 100000)]
+    #[clap(long, value_parser, default_value_t = 10000)]
     pub nagents: usize,
     #[clap(long, value_parser, default_value_t = 10)]
     pub nsims: usize,
-    #[clap(long, value_parser, default_value_t = 20)]
+    #[clap(long, value_parser, default_value_t = 5)]
     pub nseeds: usize,
-    #[clap(long, value_parser, default_value = "top-degree-neighborhood")]
+    #[clap(long, value_parser, default_value = "automatic")]
     pub policy_vaccination: VaccinationPolicy,
     #[clap(long, value_parser, default_value_t = 1.0)]
     pub quota_vaccination: f64,
@@ -80,7 +80,7 @@ pub struct Args {
     pub rate_infection: f64,
     #[clap(long, value_parser, default_value_t = 0.2)]
     pub rate_removal: f64,
-    #[clap(long, value_parser, default_value_t = 0.005)]
+    #[clap(long, value_parser, default_value_t = 0.0)]
     pub rate_vaccination: f64,
     #[clap(long, value_parser, default_value_t = 1.5)]
     pub r0: f64,
@@ -93,9 +93,9 @@ pub struct Args {
     #[clap(
         long,
         value_parser,
-        default_value = "mlMassachusetts_n100000_47f7d63f-005a-4c49-97e0-776986135c84"
+        default_value = "mlMassachusetts_n100000_71c7bd28-c4bf-40a3-acf3-a078bb9621b5"
     )]
-    pub uuid_multilayer: String,
+    pub string_multilayer: String,
 }
 
 pub fn generate_multilayer(args: Args) {
@@ -129,7 +129,7 @@ pub fn generate_multilayer(args: Args) {
 
     let uuid_ml = Uuid::new_v4().to_string();
     let string_multilayer = construct_string_multilayer(args.model_region, args.nagents);
-    let path_base = PATH_DATA_MULTILAYER;
+    let path_base = PATH_DATA_MULTILAYER_LOCAL;
 
     node_ensemble.to_pickle(
         &uuid_ml,
@@ -183,14 +183,12 @@ pub fn run_epidemic(args: Args) {
         true => load_json_config_to_input_multilayer(FILENAME_CONFIG, Some(FOLDER_CONFIG)).unwrap(),
     };
 
-    let string_multilayer = construct_string_multilayer(args.model_region, args.nagents);
-
-    let path_base = PATH_DATA_MULTILAYER;
+    let path_base = PATH_DATA_MULTILAYER_LOCAL;
     let path_multilayer = PathBuf::from(path_base)
         .join(args.model_region.to_string())
         .join(format!(
-            "ml{}_n{}_{}.pickle",
-            args.model_region, args.nagents, args.uuid_multilayer
+            "{}.pickle",
+            args.string_multilayer
         ));
 
     let node_ensemble = load_multilayer_object(&path_multilayer);
@@ -285,7 +283,6 @@ pub fn run_epidemic(args: Args) {
         &pars_model,
         &flags_output,
         &string_epidemic,
-        &string_multilayer,
-        &args.uuid_multilayer,
+        &args.string_multilayer,
     )
 }

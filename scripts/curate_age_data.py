@@ -22,9 +22,6 @@ def collect_age_structure_data():
     degree_distribution_dict = {}
 
     for state in state_list:
-
-        if state == 'National':
-            print('Hold it!')
         pop_a = ut.import_age_distribution(state=state)
         contact = ut.import_contact_matrix(state=state)
 
@@ -37,6 +34,8 @@ def collect_age_structure_data():
             new_pop_a /= np.sum(new_pop_a)
         if np.sum(degree_pdf) != 1.0:
             degree_pdf / np.sum(degree_pdf)
+
+        state = ut.convert_string_state_to_rust_enum_format(state)
 
         population_dict[state] = new_pop_a.tolist() if isinstance(new_pop_a, np.ndarray) else new_pop_a
         contact_dict[state] = new_contact.tolist() if isinstance(new_contact, np.ndarray) else new_contact

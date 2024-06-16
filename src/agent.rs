@@ -356,28 +356,6 @@ impl Agent {
         }
         vaccinated_neighbors as f64 / k as f64
     }
-
-    fn sample_age(&mut self, cdf: &[f64]) {
-        let mut rng = rand::thread_rng();
-        self.age = sample_from_cdf(cdf, &mut rng)
-    }
-
-    fn sample_degree(&mut self, cdf: &[f64]) {
-        let mut rng = rand::thread_rng();
-        self.degree = sample_from_cdf(cdf, &mut rng)
-    }
-
-    fn sample_degree_from_negative_binomial(&mut self, mean_value: f64, _standard_deviation: f64) {
-        let variance = mean_value + 13.0;
-        let r = mean_value.powi(2) / (variance - mean_value);
-        let p = r / (r + mean_value);
-
-        let mut rng = rand::thread_rng();
-        let neg_binom = NegBinomial::new(r, p).unwrap();
-
-        let degree = Rv::<u16>::draw(&neg_binom, &mut rng) as usize;
-        self.degree = degree;
-    }
 }
 
 pub struct AgentEnsemble {
@@ -1687,27 +1665,6 @@ impl AgentEnsemble {
         }
     }
 
-    pub fn sample_age(&mut self, cdf: &[f64]) {
-        for agent in self.inner_mut() {
-            agent.sample_age(cdf);
-        }
-    }
-
-    pub fn sample_degree(&mut self, cdf: &[f64]) {
-        for agent in self.inner_mut() {
-            agent.sample_degree(cdf);
-        }
-    }
-
-    pub fn sample_degree_conditioned_to_age(&mut self, intralayer_average_degree: &[f64]) {
-        for agent in self.inner_mut() {
-            let age = agent.age;
-            let average_degree = intralayer_average_degree[age];
-            let standard_deviation = 4.0;
-            agent.sample_degree_from_negative_binomial(average_degree, standard_deviation);
-        }
-    }
-
     pub fn set_opinion_threshold(&mut self, threshold: f64) {
         for agent in self.inner_mut() {
             agent.threshold = threshold;
@@ -2092,9 +2049,9 @@ impl Multilayer {
     pub fn new(size: usize) -> Self {
         let mut multilayer = Multilayer { inner: Vec::new() };
 
-        for _ in 0..size {
+        for i in 0..size {
             let node = Node {
-                id: 0,
+                id: i,
                 layer: 0,
                 degree: 0,
                 neighbors: Vec::new(),
@@ -2142,9 +2099,9 @@ impl Multilayer {
         let mut node_connections: HashMap<usize, usize> = HashMap::new();
         let max_attempts = 100;
 
-        for (_, focal_agent) in self.inner().iter().enumerate() {
-            let focal_id = focal_agent.id;
-            let focal_layer = focal_agent.layer;
+        for (_, focal_node) in self.inner().iter().enumerate() {
+            let focal_id = focal_node.id;
+            let focal_layer = focal_node.layer;
             let target_layer_probs = &layer_probability[focal_layer];
             let layer_dist = WeightedIndex::new(target_layer_probs).unwrap();
 
@@ -2152,7 +2109,7 @@ impl Multilayer {
 
             while attempts < max_attempts {
                 if !intralayer_stubs[focal_layer].contains(&focal_id)
-                    || *node_connections.get(&focal_id).unwrap_or(&0) >= focal_agent.degree
+                    || *node_connections.get(&focal_id).unwrap_or(&0) >= focal_node.degree
                 {
                     break;
                 }

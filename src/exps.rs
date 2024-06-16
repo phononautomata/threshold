@@ -26,7 +26,7 @@ use crate::utils::{
 pub struct Args {
     #[clap(long, value_parser, default_value_t = false)]
     pub flag_config: bool,
-    #[clap(long, value_parser, default_value_t = true)]
+    #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_age: bool,
     #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_agent: bool,
@@ -56,17 +56,17 @@ pub struct Args {
     pub fraction_vaccinated: f64,
     #[clap(long, value_parser, default_value_t = 0.0)]
     pub fraction_zealot: f64,
-    #[clap(long, value_parser, default_value_t = 1)]
+    #[clap(long, value_parser, default_value_t = 2)]
     pub id_experiment: usize,
     #[clap(long, value_parser, default_value = "random")]
     pub model_hesitancy: HesitancyModel,
     #[clap(long, value_parser, default_value = "homogeneous-thresholds")]
     pub model_opinion: OpinionModel,
-    #[clap(long, value_parser, default_value = "west-virginia")]
+    #[clap(long, value_parser, default_value = "national")]
     pub model_region: Region,
     #[clap(long, value_parser, default_value = "top-degree-neighborhood")]
     pub model_seed: SeedModel,
-    #[clap(long, value_parser, default_value_t = 10000)]
+    #[clap(long, value_parser, default_value_t = 100000)]
     pub nagents: usize,
     #[clap(long, value_parser, default_value_t = 10)]
     pub nsims: usize,
@@ -93,7 +93,7 @@ pub struct Args {
     #[clap(
         long,
         value_parser,
-        default_value = "mlMassachusetts_n100000_71c7bd28-c4bf-40a3-acf3-a078bb9621b5"
+        default_value = "mlNational_n100000_0ab7a4ca-66aa-43e2-801c-8fb5d135c6a2"
     )]
     pub string_multilayer: String,
 }

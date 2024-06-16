@@ -64,4 +64,4 @@ pub const PATH_DATA_MULTILAYER_PEPINO: &str = "/data/alfonso/threshold/data/cura
 pub const PATH_DATA_MULTILAYER_LOCAL: &str = "/Users/alfonso/workshop/threshold/data/curated/networks";
 pub const PATH_RESULTS_TEMP: &str = "/data/alfonso/threshold/results/temp";
 pub const PATH_RESULTS_CURATED_PEPINO: &str = "/data/alfonso/threshold/results/curated";
-pub const PATH_RESULTS_CURATED_LOCAL: &str = "/Users/alfonso/workshp/threshold/results/curated";
+pub const PATH_RESULTS_CURATED_LOCAL: &str = "/Users/alfonso/workshop/threshold/results/curated";

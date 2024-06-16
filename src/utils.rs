@@ -2952,6 +2952,7 @@ pub fn load_json_config_to_input_multilayer(
 }
 
 pub fn load_multilayer_object(path_multilayer: &PathBuf) -> Multilayer {
+    println!("{:?}", path_multilayer);
     let file = File::open(path_multilayer).expect("Unable to open file");
     let r = BufReader::new(file);
     let options = DeOptions::new();

@@ -138,12 +138,12 @@ def collect_age_structure_data(path=cwd_path, lower_path='data'):
     with open(full_name, 'w') as file:
         json.dump(degree_distribution_dict, file)
 
-def collect_pickle_filenames(fullpath, header, string_segments=None):
-    file_list = os.listdir(fullpath)
+def collect_filenames(path_search, header=None, string_segments=None, extension=None):
+    file_list = os.listdir(path_search)
 
     result = []
     for file_name in file_list:
-        if file_name.endswith('.pickle') and file_name.startswith(header) and (string_segments is None or all(segment in file_name for segment in string_segments)):
+        if file_name.endswith(extension) and file_name.startswith(header) and (string_segments is None or all(segment in file_name for segment in string_segments)):
             result.append(file_name)
 
     return result
@@ -539,11 +539,12 @@ def layer_average_degree(contact_matrix):
     return np.sum(contact_matrix, axis=1)
 
 def load_output(fullname, main_keys, observable_keys):
-    if not fullname.endswith('.pickle'):
-        fullname += '.pickle'
-
-    with open(fullname, 'rb') as input_data:
-        results_dict = pk.load(input_data)
+    if fullname.endswith('.pickle'):
+        with open(fullname, 'rb') as input_data:
+            results_dict = pk.load(input_data)
+    elif fullname.endswith('.json'):
+        with open(fullname, 'w') as file:
+            results_dict = json.dump(input_data, file)
 
     if 'prevalence' not in observable_keys:
         observable_keys.append('prevalence')
@@ -625,6 +626,10 @@ def sir_prevalence(r0):
             condition = False
     
     return r_inf
+
+def stat_global_results(model_region, value_af, value_th, value_vr, path_cwd):
+    pass
+
 
 def stat_global_output(output_dict):
     stat_dict = {}
@@ -934,5 +939,3 @@ def write_annotations_vaccination_curves(
             xytext=(var_values[12], prev_avg[12] + 0.15), 
             arrowprops=dict(arrowstyle='-', lw=1),
             )
-
-#collect_age_structure_data(path=cwd_path, lower_path='data')

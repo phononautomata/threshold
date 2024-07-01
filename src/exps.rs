@@ -9,16 +9,11 @@ use crate::agent::{
     AgentEnsemble, HesitancyModel, Multilayer, OpinionModel, SeedModel, VaccinationPolicy,
 };
 use crate::cons::{
-    EXTENSION_RESULTS, FILENAME_CONFIG, FILENAME_DATA_CONTACT_MATRIX, FILENAME_DATA_POPULATION_AGE,
-    FILENAME_DATA_VACCINATION_ATTITUDE, FOLDER_CONFIG, FOLDER_RESULTS, PATH_DATA_MULTILAYER_LOCAL,
+    EXTENSION_RESULTS_PICKLE, FILENAME_CONFIG, FILENAME_DATA_CONTACT_MATRIX, FILENAME_DATA_POPULATION_AGE, FILENAME_DATA_VACCINATION_ATTITUDE, FOLDER_CONFIG, FOLDER_RESULTS_CURATED, PATH_DATA_MULTILAYER_LOCAL
 };
 use crate::core::dynamical_loop;
 use crate::utils::{
-    build_normalized_cdf, compute_interlayer_probability_matrix, compute_intralayer_average_degree,
-    construct_string_epidemic, construct_string_multilayer, count_underaged,
-    load_json_config_to_input_multilayer, load_multilayer_object, read_key_and_matrixf64_from_json,
-    read_key_and_vecf64_from_json, rebuild_contact_data_from_multilayer, InputMultilayer,
-    OutputEnsemble, OutputFlags, Region, VaccinationPars,
+    build_normalized_cdf, compute_interlayer_probability_matrix, compute_intralayer_average_degree, construct_string_epidemic, construct_string_multilayer, count_underaged, extract_region_and_nagents, load_json_config_to_input_multilayer, load_multilayer_object, read_key_and_matrixf64_from_json, read_key_and_vecf64_from_json, rebuild_contact_data_from_multilayer, InputMultilayer, OutputEnsemble, OutputFlags, Region, VaccinationPars
 };
 
 #[derive(Parser, Debug)]
@@ -34,11 +29,11 @@ pub struct Args {
     pub flag_output_attitude: bool,
     #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_cluster: bool,
-    #[clap(long, value_parser, default_value_t = false)]
+    #[clap(long, value_parser, default_value_t = true)]
     pub flag_output_contact: bool,
     #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_degree: bool,
-    #[clap(long, value_parser, default_value_t = true)]
+    #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_global: bool,
     #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_time: bool,
@@ -56,7 +51,7 @@ pub struct Args {
     pub fraction_vaccinated: f64,
     #[clap(long, value_parser, default_value_t = 0.0)]
     pub fraction_zealot: f64,
-    #[clap(long, value_parser, default_value_t = 2)]
+    #[clap(long, value_parser, default_value_t = 1)]
     pub id_experiment: usize,
     #[clap(long, value_parser, default_value = "random")]
     pub model_hesitancy: HesitancyModel,
@@ -66,9 +61,9 @@ pub struct Args {
     pub model_region: Region,
     #[clap(long, value_parser, default_value = "top-degree-neighborhood")]
     pub model_seed: SeedModel,
-    #[clap(long, value_parser, default_value_t = 100000)]
+    #[clap(long, value_parser, default_value_t = 200000)]
     pub nagents: usize,
-    #[clap(long, value_parser, default_value_t = 10)]
+    #[clap(long, value_parser, default_value_t = 1)]
     pub nsims: usize,
     #[clap(long, value_parser, default_value_t = 5)]
     pub nseeds: usize,
@@ -93,7 +88,7 @@ pub struct Args {
     #[clap(
         long,
         value_parser,
-        default_value = "mlNational_n100000_0ab7a4ca-66aa-43e2-801c-8fb5d135c6a2"
+        default_value = "mlDistrictOfColumbia_n100000_0ab7a4ca-66aa-43e2-801c-8fb5d135c6a2"
     )]
     pub string_multilayer: String,
 }
@@ -144,16 +139,25 @@ pub fn generate_multilayer(args: Args) {
         let serialized = serde_pickle::to_vec(&output_contact, SerOptions::new()).unwrap();
 
         let mut path = env::current_dir().expect("Failed to get current directory");
-        path.push(FOLDER_RESULTS);
+        path.push(FOLDER_RESULTS_CURATED);
         path.push(format!(
             "contact_{}_{}{}",
-            string_multilayer, uuid_ml, EXTENSION_RESULTS
+            string_multilayer, uuid_ml, EXTENSION_RESULTS_PICKLE
         ));
         std::fs::write(path, serialized).unwrap();
     }
 }
 
 pub fn run_epidemic(args: Args) {
+    let result = extract_region_and_nagents(&args.string_multilayer);
+    let (model_region, _) = match result {
+        Ok((region, nagents)) => (region, nagents),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            return;
+        }
+    };
+
     let mut pars_model = match args.flag_config {
         false => InputMultilayer::new(
             args.flag_underage,
@@ -166,7 +170,7 @@ pub fn run_epidemic(args: Args) {
             args.id_experiment,
             args.model_hesitancy,
             args.model_opinion,
-            args.model_region,
+            model_region,
             args.model_seed,
             args.nseeds,
             args.nsims,
@@ -185,7 +189,7 @@ pub fn run_epidemic(args: Args) {
 
     let path_base = PATH_DATA_MULTILAYER_LOCAL;
     let path_multilayer = PathBuf::from(path_base)
-        .join(args.model_region.to_string())
+        .join(model_region.to_string())
         .join(format!(
             "{}.pickle",
             args.string_multilayer
@@ -198,7 +202,7 @@ pub fn run_epidemic(args: Args) {
 
     let population_filename = FILENAME_DATA_POPULATION_AGE;
     let population_vector: Vec<f64> =
-        read_key_and_vecf64_from_json(args.model_region, population_filename);
+        read_key_and_vecf64_from_json(model_region, population_filename);
 
     let eligible_fraction = if args.flag_underage {
         let underaged_fraction = count_underaged(&population_vector);
@@ -261,7 +265,7 @@ pub fn run_epidemic(args: Args) {
 
     let mut output_ensemble = OutputEnsemble::new();
 
-    println!("Outbreak in {}", args.model_region);
+    println!("Outbreak in {}", model_region);
 
     for sim in 0..pars_model.nsims {
         println!("Dynamical realization={sim}");

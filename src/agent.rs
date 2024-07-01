@@ -32,12 +32,12 @@ pub enum Attitude {
 pub enum HesitancyModel {
     #[serde(rename = "adult")]
     Adult,
+    #[serde(rename = "data-driven")]
+    DataDriven,
     #[serde(rename = "elder")]
     Elder,
     #[serde(rename = "elder-to-young")]
     ElderToYoung,
-    #[serde(rename = "data-driven")]
-    DataDriven,
     #[serde(rename = "middle-age")]
     Middleage,
     #[serde(rename = "random")]
@@ -77,8 +77,8 @@ pub enum OpinionModel {
 pub enum SeedModel {
     #[serde(rename = "bottom-degree-neighborhood")]
     BottomDegreeNeighborhood,
-    #[serde(rename = "bottom-multi-locus")]
-    BottomMultiLocus,
+    #[serde(rename = "bottom-degree-multi-locus")]
+    BottomDegreeMultiLocus,
     #[serde(rename = "random-multi-locus")]
     RandomMultiLocus,
     #[serde(rename = "random-neighborhood")]
@@ -127,10 +127,10 @@ pub enum VaccinationPolicy {
     DataDriven,
     #[serde(rename = "degree-bottom")]
     DegreeBottom,
-    #[serde(rename = "degree-top")]
-    DegreeTop,
     #[serde(rename = "degree-random")]
     DegreeRandom,
+    #[serde(rename = "degree-top")]
+    DegreeTop,
     #[serde(rename = "random")]
     Random,
 }
@@ -911,7 +911,7 @@ impl AgentEnsemble {
                     println!("Effective infected individuals = {effective_infected}");
                 }
             }
-            SeedModel::BottomMultiLocus => {
+            SeedModel::BottomDegreeMultiLocus => {
                 if FLAG_VERBOSE {
                     println!("Sorry! Not implemented yet!");
                 }
@@ -1065,7 +1065,7 @@ impl AgentEnsemble {
                     println!("Effective infected individuals = {effective_infected}");
                 }
             }
-            SeedModel::BottomMultiLocus => {
+            SeedModel::BottomDegreeMultiLocus => {
                 if FLAG_VERBOSE {
                     println!("Sorry! Not implemented yet!")
                 }
@@ -1161,7 +1161,6 @@ impl AgentEnsemble {
     pub fn introduce_opinions(&mut self, active_fraction: f64, zealot_fraction: f64) {
         let total_fraction = active_fraction + zealot_fraction;
 
-        // Check if total fraction exceeds 1
         if total_fraction > 1.0 {
             // Adjust zealot_fraction to make total_fraction equal to 1
             let adjusted_zealot_fraction = 1.0 - active_fraction;

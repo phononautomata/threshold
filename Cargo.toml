@@ -11,6 +11,7 @@ clap = { version = "3.2", features = ["derive"] }
 config = "0.11.0"
 rand = "0.8.5"
 rand_distr = "0.4.3"
+regex = "1"
 rv = "0.16.4"
 serde = { version = "1.0", features = ["derive"] }
 serde-pickle = "1.1.1"

@@ -1,5 +1,6 @@
 use rand::rngs::ThreadRng;
 use rand::Rng;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_pickle::{DeOptions, SerOptions};
@@ -16,12 +17,7 @@ use crate::agent::{
     VaccinationPolicy,
 };
 use crate::cons::{
-    CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS, FOLDER_DATA_CUR, FOLDER_RESULTS,
-    HEADER_AGE, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_ATTITUDE,
-    HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_DEGREE, HEADER_GLOBAL,
-    HEADER_PROJECT, HEADER_TIME, HEADER_TIME_STATS, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE,
-    PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF,
-    PATH_RESULTS_CURATED_LOCAL,
+    CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS_PICKLE, FOLDER_DATA_CURATED, FOLDER_RESULTS, HEADER_AGE, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_ATTITUDE, HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_DEGREE, HEADER_GLOBAL, HEADER_PROJECT, HEADER_TIME, HEADER_TIME_STATS, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE, PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF, PATH_RESULTS_CURATED_LOCAL
 };
 
 #[derive(Clone, Copy, Serialize, Deserialize, Display, Debug, clap::ValueEnum, PartialEq, Eq)]
@@ -1843,7 +1839,7 @@ impl OutputEnsemble {
             );
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
-            path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
+            path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
             std::fs::write(path, serialized).unwrap();
         }
 
@@ -1861,7 +1857,7 @@ impl OutputEnsemble {
             );
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
-            path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
+            path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
             std::fs::write(path, asp_serialized).unwrap();
 
             let agent_distribution = compute_agent_distribution(&assembled_agent_output);
@@ -1875,7 +1871,7 @@ impl OutputEnsemble {
             );
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
-            path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
+            path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
             std::fs::write(path, ad_serialized).unwrap();
         }
 
@@ -1895,7 +1891,7 @@ impl OutputEnsemble {
             );
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
-            path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
+            path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
             std::fs::write(path, serialized).unwrap();
         }
 
@@ -1912,7 +1908,7 @@ impl OutputEnsemble {
             );
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
-            path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
+            path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
             std::fs::write(path, csp_serialized).unwrap();
 
             let cluster_distribution = compute_cluster_distribution(&assembled_cluster_output);
@@ -1926,7 +1922,7 @@ impl OutputEnsemble {
             );
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
-            path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
+            path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
             std::fs::write(path, cd_serialized).unwrap();
         }
 
@@ -1946,7 +1942,7 @@ impl OutputEnsemble {
             );
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
-            path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
+            path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
             std::fs::write(path, serialized).unwrap();
         }
 
@@ -1966,7 +1962,7 @@ impl OutputEnsemble {
             );
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
-            path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
+            path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
             std::fs::write(path, serialized).unwrap();
         }
 
@@ -1982,7 +1978,7 @@ impl OutputEnsemble {
             );
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
-            path.push(format!("{}{}", string_result, EXTENSION_RESULTS));
+            path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
             std::fs::write(path, serialized).unwrap();
         }
     }
@@ -2805,12 +2801,12 @@ pub fn construct_string_epidemic(model_pars: &InputMultilayer) -> String {
         model_pars.threshold_opinion,
         model_pars.rate_vaccination,
         model_pars.fraction_zealot,
-        model_pars.model_hesitancy,
-        model_pars.model_opinion,
-        model_pars.model_seed,
+        convert_enum_hesitancy_to_string(model_pars.model_hesitancy, true),
+        convert_enum_opinion_to_string(model_pars.model_opinion, true),
+        convert_enum_seed_to_string(model_pars.model_seed, true),
         model_pars.nseeds,
         model_pars.nsims,
-        model_pars.policy_vaccination,
+        convert_enum_vaccination_to_string(model_pars.policy_vaccination, true),
         model_pars.quota_vaccination,
         model_pars.r0,
         model_pars.rate_removal,
@@ -2861,6 +2857,283 @@ fn construct_file_path(
     )))
 }
 
+fn convert_enum_hesitancy_to_string(
+    model_hesitancy: HesitancyModel,
+    flag_short: bool,
+) -> String {
+    match model_hesitancy {
+        HesitancyModel::Adult => {
+            if flag_short {
+                "ADU".to_owned()
+            } else {
+                "Adult".to_owned()
+            }
+        }
+        HesitancyModel::DataDriven => {
+            if flag_short {
+                "DD".to_owned()
+            } else {
+                "DataDriven".to_owned()
+            }
+        }
+        HesitancyModel::Elder => {
+            if flag_short {
+                "ELD".to_owned()
+            } else {
+                "Elder".to_owned()
+            }
+        }
+        HesitancyModel::ElderToYoung => {
+            if flag_short {
+                "EtY".to_owned()
+            } else {
+                "ElderToYoung".to_owned()
+            }
+        }
+        HesitancyModel::Middleage => {
+            if flag_short {
+                "MID".to_owned()
+            } else {
+                "Middleage".to_owned()
+            }
+        }
+        HesitancyModel::Random => {
+            if flag_short {
+                "RAN".to_owned()
+            } else {
+                "Random".to_owned()
+            }
+        }
+        HesitancyModel::Underage => {
+            if flag_short {
+                "UND".to_owned()
+            } else {
+                "Underage".to_owned()
+            }
+        }
+        HesitancyModel::Young => {
+            if flag_short {
+                "YOU".to_owned()
+            } else {
+                "Young".to_owned()
+            }
+        }
+        HesitancyModel::YoungToElder => {
+            if flag_short {
+                "YtE".to_owned()
+            } else {
+                "YoungToElder".to_owned()
+            }
+        }
+    }
+}
+
+fn convert_enum_opinion_to_string(
+    model_opinion: OpinionModel, 
+    flag_short: bool,
+) -> String {
+    match model_opinion {
+        OpinionModel::DataDrivenThresholds => {
+            if flag_short {
+                "DD".to_owned()
+            } else {
+                "DataDriven".to_owned()
+            }
+        }
+        OpinionModel::ElderCare => {
+            if flag_short {
+                "EC".to_owned()
+            } else {
+                "ElderCare".to_owned()
+            }
+        }
+        OpinionModel::HomogeneousThresholds => {
+            if flag_short {
+                "HOT".to_owned()
+            } else {
+                "HomogeneousThresholds".to_owned()
+            }
+        }
+        OpinionModel::HomogeneousWithZealots => {
+            if flag_short {
+                "HWZ".to_owned()
+            } else {
+                "HomogeneousWithZealots".to_owned()
+            }
+        }
+        OpinionModel::Majority => {
+            if flag_short {
+                "MAJ".to_owned()
+            } else {
+                "Majority".to_owned()
+            }
+        }
+    }
+}
+
+fn convert_enum_seed_to_string(
+    model_seed: SeedModel, 
+    flag_short: bool,
+) -> String {
+    match model_seed {
+        SeedModel::BottomDegreeNeighborhood => {
+            if flag_short {
+                "BNE".to_owned()
+            } else {
+                "BottomDegreeNeighborhood".to_owned()
+            }
+        }
+        SeedModel::BottomDegreeMultiLocus => {
+            if flag_short {
+                "BML".to_owned()
+            } else {
+                "BottomMultiLocus".to_owned()
+            }
+        }
+        SeedModel::RandomMultiLocus => {
+            if flag_short {
+                "RML".to_owned()
+            } else {
+                "RandomMultiLocus".to_owned()
+            }
+        }
+        SeedModel::RandomNeighborhood => {
+            if flag_short {
+                "RNE".to_owned()
+            } else {
+                "RandomNeighborhood".to_owned()
+            }
+        }
+        SeedModel::TopDegreeMultiLocus => {
+            if flag_short {
+                "TML".to_owned()
+            } else {
+                "TopDegreMultiLocus".to_owned()
+            }
+        }
+        SeedModel::TopDegreeNeighborhood => {
+            if flag_short {
+                "TNE".to_owned()
+            } else {
+                "TopDegreeNeighborhood".to_owned()
+            }
+        }
+    }
+}
+
+fn convert_enum_vaccination_to_string(
+    model_vaccination: VaccinationPolicy,
+    flag_short: bool
+) -> String {
+    match model_vaccination {
+        VaccinationPolicy::AgeAdult => {
+            if flag_short {
+                "AAD".to_owned()
+            } else {
+                "AgeAdult".to_owned()
+            }
+        }
+        VaccinationPolicy::AgeElder => {
+            if flag_short {
+                "AEL".to_owned()
+            } else {
+                "AgeElder".to_owned()
+            }
+        }
+        VaccinationPolicy::AgeMiddleage => {
+            if flag_short {
+                "AMI".to_owned()
+            } else {
+                "AgeMiddleage".to_owned()
+            }
+        }
+        VaccinationPolicy::AgeTop => {
+            if flag_short {
+                "ATO".to_owned()
+            } else {
+                "AgeTop".to_owned()
+            }
+        }
+        VaccinationPolicy::AgeUnderage => {
+            if flag_short {
+                "AUN".to_owned()
+            } else {
+                "AgeUnderage".to_owned()
+            }
+        }
+        VaccinationPolicy::AgeYoung => {
+            if flag_short {
+                "AYO".to_owned()
+            } else {
+                "AgeYoung".to_owned()
+            }
+        }
+        VaccinationPolicy::AgeYoungToElder => {
+            if flag_short {
+                "AYtE".to_owned()
+            } else {
+                "AgeYoungToElder".to_owned()
+            }
+        }
+        VaccinationPolicy::Automatic => {
+            if flag_short {
+                "AUTO".to_owned()
+            } else {
+                "Automatic".to_owned()
+            }
+        }
+        VaccinationPolicy::ComboElderTop => {
+            if flag_short {
+                "CET".to_owned()
+            } else {
+                "ComboElderTop".to_owned()
+            }
+        }
+        VaccinationPolicy::ComboYoungTop => {
+            if flag_short {
+                "CYT".to_owned()
+            } else {
+                "ComboYoungTop".to_owned()
+            }
+        }
+        VaccinationPolicy::DataDriven => {
+            if flag_short {
+                "DD".to_owned()
+            } else {
+                "DataDriven".to_owned()
+            }
+        }
+        VaccinationPolicy::DegreeBottom => {
+            if flag_short {
+                "DBO".to_owned()
+            } else {
+                "DegreeBottom".to_owned()
+            }
+        }
+        VaccinationPolicy::DegreeRandom => {
+            if flag_short {
+                "DRAN".to_owned()
+            } else {
+                "DegreeRandom".to_owned()
+            }
+        }
+        VaccinationPolicy::DegreeTop => {
+            if flag_short {
+                "DTO".to_owned()
+            } else {
+                "DegreeTop".to_owned()
+            }
+        }
+        VaccinationPolicy::Random=> {
+            if flag_short {
+                "RAN".to_owned()
+            } else {
+                "Random".to_owned()
+            }
+        }
+    }
+}
+
 pub fn convert_hm_value_to_bool(hash_map: HashMap<String, Value>) -> HashMap<String, bool> {
     hash_map
         .into_iter()
@@ -2898,7 +3171,7 @@ pub fn create_output_files(
     let mut output_file_map: HashMap<String, File> = HashMap::new();
 
     let base_path = env::current_dir()?.join(FOLDER_RESULTS);
-    let extension = EXTENSION_RESULTS;
+    let extension = EXTENSION_RESULTS_PICKLE;
 
     let outputs = vec![
         (output_pars.age, HEADER_AGE),
@@ -2919,6 +3192,79 @@ pub fn create_output_files(
     }
 
     Ok(output_file_map)
+}
+
+pub fn extract_region_and_nagents(input: &str) -> Result<(Region, usize), Box<dyn std::error::Error>> {
+    let re = Regex::new(r"ml([A-Za-z\-]+)_n(\d+)_")?;
+    let mut region_map: HashMap<&str, Region> = HashMap::new();
+
+    region_map.insert("Alabama", Region::Alabama);
+    region_map.insert("Alaska", Region::Alaska);
+    region_map.insert("Arizona", Region::Arizona);
+    region_map.insert("Arkansas", Region::Arkansas);
+    region_map.insert("California", Region::California);
+    region_map.insert("Colorado", Region::Colorado);
+    region_map.insert("Connecticut", Region::Connecticut);
+    region_map.insert("Delaware", Region::Delaware);
+    region_map.insert("DistrictOfColumbia", Region::DistrictOfColumbia);
+    region_map.insert("Florida", Region::Florida);
+    region_map.insert("Georgia", Region::Georgia);
+    region_map.insert("Hawaii", Region::Hawaii);
+    region_map.insert("Idaho", Region::Idaho);
+    region_map.insert("Illinois", Region::Illinois);
+    region_map.insert("Indiana", Region::Indiana);
+    region_map.insert("Iowa", Region::Iowa);
+    region_map.insert("Kansas", Region::Kansas);
+    region_map.insert("Kentucky", Region::Kentucky);
+    region_map.insert("Louisiana", Region::Louisiana);
+    region_map.insert("Maine", Region::Maine);
+    region_map.insert("Maryland", Region::Maryland);
+    region_map.insert("Massachusetts", Region::Massachusetts);
+    region_map.insert("Michigan", Region::Michigan);
+    region_map.insert("Minnesota", Region::Minnesota);
+    region_map.insert("Mississippi", Region::Mississippi);
+    region_map.insert("Missouri", Region::Missouri);
+    region_map.insert("Montana", Region::Montana);
+    region_map.insert("Nebraska", Region::Nebraska);
+    region_map.insert("Nevada", Region::Nevada);
+    region_map.insert("NewHampshire", Region::NewHampshire);
+    region_map.insert("NewJersey", Region::NewJersey);
+    region_map.insert("NewMexico", Region::NewMexico);
+    region_map.insert("NewYork", Region::NewYork);
+    region_map.insert("NorthCarolina", Region::NorthCarolina);
+    region_map.insert("NorthDakota", Region::NorthDakota);
+    region_map.insert("Ohio", Region::Ohio);
+    region_map.insert("Oklahoma", Region::Oklahoma);
+    region_map.insert("Oregon", Region::Oregon);
+    region_map.insert("Pennsylvania", Region::Pennsylvania);
+    region_map.insert("RhodeIsland", Region::RhodeIsland);
+    region_map.insert("SouthCarolina", Region::SouthCarolina);
+    region_map.insert("SouthDakota", Region::SouthDakota);
+    region_map.insert("Tennessee", Region::Tennessee);
+    region_map.insert("Texas", Region::Texas);
+    region_map.insert("Utah", Region::Utah);
+    region_map.insert("Vermont", Region::Vermont);
+    region_map.insert("Virginia", Region::Virginia);
+    region_map.insert("Washington", Region::Washington);
+    region_map.insert("WestVirginia", Region::WestVirginia);
+    region_map.insert("Wisconsin", Region::Wisconsin);
+    region_map.insert("Wyoming", Region::Wyoming);
+    region_map.insert("National", Region::National);
+    region_map.insert("None", Region::None);
+
+    if let Some(caps) = re.captures(input) {
+        let region_str = &caps[1];
+        let nagents_str = &caps[2];
+
+        if let Some(&region) = region_map.get(region_str) {
+            let nagents = nagents_str.parse::<usize>()?;
+            Ok((region, nagents))
+        } else {
+            Err("Region not found.".into())
+        }
+    } else {
+        Err("Input string does not match the expected pattern.".into())
+    }
 }
 
 pub fn load_json_config_to_input_multilayer(
@@ -3288,7 +3634,7 @@ pub fn read_key_and_f64_from_json(state: Region, filename: &str) -> f64 {
 pub fn read_key_and_matrixf64_from_json(state: Region, filename: &str) -> Vec<Vec<f64>> {
     let mut path = env::current_dir().expect("Failed to get current directory");
 
-    path.push(FOLDER_DATA_CUR);
+    path.push(FOLDER_DATA_CURATED);
     path.push(format!("{}.json", filename));
 
     let mut file = File::open(&path).unwrap();
@@ -3307,7 +3653,7 @@ pub fn read_key_and_matrixf64_from_json(state: Region, filename: &str) -> Vec<Ve
 
 pub fn read_key_and_vecf64_from_json(state: Region, filename: &str) -> Vec<f64> {
     let mut path = env::current_dir().expect("Failed to get current directory");
-    path.push(FOLDER_DATA_CUR);
+    path.push(FOLDER_DATA_CURATED);
     path.push(format!("{}.json", filename));
 
     let mut file = File::open(&path).unwrap();

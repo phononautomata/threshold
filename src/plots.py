@@ -1,9 +1,11 @@
 import os
+import re
 import json
 import pickle as pk
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
-
+import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 from scipy.stats import nbinom
 
@@ -15,70 +17,106 @@ prevalence_cutoff = 0.001
 
 def plot_panel_homogeneous_thresholds_heatmaps(
         model_region='National', 
-        array_thresholds=None, 
-        array_active=None, 
+        model_opinion='HOT',
+        model_hesitancy='RAN',
         target_vaccination=None,
         target_zealot=0.0, 
         path_cwd=os.getcwd(),
         path_relative_source='results/curated',
+        cutoff_prevalence = 0.05,
         ):
 
     path_full_source = os.path.join(path_cwd, path_relative_source)
-    list_filenames = ut.collect_pickle_filenames(fullpath=path_full_source, header='global__')
+    list_filenames = ut.collect_filenames(
+        path_search=path_full_source, 
+        header='global__', 
+        string_segments=[model_region, model_opinion, model_hesitancy], 
+        extension='.json',
+        )
 
-    n = 20000
-    prevalence_cutoff = 0.05
+    dict_results = {}
 
-    go_dict = {}
+    for i, filename in enumerate(list_filenames):
+        fullname = os.path.join(path_cwd, path_relative_source, filename)
 
-    for i, epi_filename in enumerate(list_filenames):
-        print("Loop {0}, filename: {1}".format(i + 1, epi_filename))
+        size = int(filename.split('_n')[1].split('_')[0])
+        fa = float(filename.split('_fa')[1].split('_')[0])
+        th = float(filename.split('_th')[1].split('_')[0])
+        rv = float(filename.split('_rv')[1].split('_')[0])
+        fz = float(filename.split('_fz')[1].split('_')[0])
 
-        lower_path = 'results/'
-        epi_fullname = os.path.join(cwd_path, lower_path, epi_filename)
+        if fz == target_zealot and rv in target_vaccination:
+            with open(fullname, 'rb') as input_data:
+                dict_output = pk.load(input_data)
 
-        acf_flag = float(epi_filename.split('_acf')[1].split('_')[0])
-        thr_flag = float(epi_filename.split('_thr')[1].split('_')[0])
-        var_flag = float(epi_filename.split('_var')[1].split('_')[0])
-        zef_flag = float(epi_filename.split('_zef')[1].split('_')[0])
+            key_pars = (fa, th, rv, fz)
 
-        if zef_flag == target_zealot and var_flag in target_vaccination:
-            global_output = ut.load_global_output(epi_fullname)
+            if key_pars not in dict_results:
+                dict_results[key_pars] = {'convinced': [], 'prevalence': [], 'vaccinated': []}
 
-            filtered_output = ut.filter_global_output(global_output, n, prevalence_cutoff)
+            array_convinced = dict_output['global']['convinced']
+            array_prevalence = dict_output['global']['prevalence']
+            array_vaccinated = dict_output['global']['vaccinated']
 
-            stat_output = ut.stat_global_output(filtered_output)
-    
-            if var_flag not in go_dict:
-                go_dict[var_flag] = {}
+            for idx, prevalence in enumerate(array_prevalence):
+                if (prevalence / size) >= cutoff_prevalence:
+                    dict_results[key_pars]['convinced'].append(array_convinced[idx] / size)
+                    dict_results[key_pars]['prevalence'].append(array_prevalence[idx] / size)
+                    dict_results[key_pars]['vaccinated'].append(array_vaccinated[idx] / size)
 
-            key_tuple = (thr_flag, acf_flag)
-            go_dict[var_flag][key_tuple] = stat_output
+    dict_stats = {}
+    for key_pars, results in dict_results.items():
+        dict_stats[key_pars] = {
+            'convinced': {
+                'mean': np.nanmean(results['convinced']) if results['convinced'] else float('nan'),
+                'std': np.nanstd(results['convinced']) if results['convinced'] else float('nan'),
+                },
+            'prevalence': {
+                'mean': np.nanmean(results['prevalence']) if results['prevalence'] else float('nan'),
+                'std': np.nanstd(results['prevalence']) if results['prevalence'] else float('nan'),
+                },
+            'vaccinated': {
+                'mean': np.nanmean(results['vaccinated']) if results['vaccinated'] else float('nan'),
+                'std': np.nanstd(results['vaccinated']) if results['vaccinated'] else float('nan'),
+            }
+        }
+
+    fa_values = set()
+    th_values = set()
+    rv_values = set()
+
+    for key in dict_results.keys():
+        fa, th, rv, fz = key
+        fa_values.add(fa)
+        th_values.add(th)
+        rv_values.add(rv)
+
+    array_control_fa = np.array(sorted(fa_values))
+    array_control_th = np.array(sorted(th_values))
+    array_control_rv = np.array(sorted(rv_values))
 
     fig, ax = plt.subplots(nrows=4, ncols=3, figsize=(18, 20))
     cmap = 'viridis'
 
-    for v, var_flag in enumerate(go_dict.keys()):
-        par2_array = sorted(list(set([key[1] for key in go_dict.keys()]))) # ACTIVE FRACTION
-        par1_array = sorted(list(set([key[0] for key in go_dict.keys()]))) # THRESHOLD
-        par1_len = len(par1_array)
-        par2_len = len(par2_array)
+    for v, rv in enumerate(array_control_rv):
+        len_th = len(array_control_th)
+        len_fa = len(array_control_fa)
 
-        X, Y = np.meshgrid(par1_array, par2_array)
-        R = np.zeros((par2_len, par1_len))
-        V = np.zeros((par2_len, par1_len))
-        C = np.zeros((par2_len, par1_len))
+        X, Y = np.meshgrid(array_control_th, array_control_fa)
+        R = np.zeros((len_fa, len_th))
+        V = np.zeros((len_fa, len_th))
+        C = np.zeros((len_fa, len_th))
 
-        for i, p1 in enumerate(par1_array):
-            for j, p2 in enumerate(par2_array):
-                if (p1, p2) in go_dict:
+        for i, th in enumerate(array_control_th):
+            for j, fa in enumerate(array_control_fa):
+                if (th, fa, rv, fz) in dict_stats:
 
-                    R[j][i] = go_dict[(p1, p2)]['prevalence']['avg']
-                    V[j][i] = go_dict[(p1, p2)]['vaccinated']['avg']
+                    R[j][i] = dict_stats[(fa, th, rv, fz)]['prevalence']['mean']
+                    V[j][i] = dict_stats[(fa, th, rv, fz)]['vaccinated']['mean']
 
-                    max_change = 1.0 - p2
-                    norm_change = (go_dict[(p1, p2)]['convinced']['avg'] - p2) / max_change
-                    if p2 == 1.0:
+                    max_change = 1.0 - fa
+                    norm_change = (dict_stats[(fa, th, rv, fz)]['convinced']['mean'] - fa) / max_change
+                    if fa == 1.0:
                         norm_change = 0.0
                     C[j][i] = norm_change
                 else:
@@ -90,7 +128,7 @@ def plot_panel_homogeneous_thresholds_heatmaps(
         im1 = ax[v, 1].pcolormesh(X, Y, V, shading='auto', cmap=cmap, vmin=0.0, vmax=1.0)
         im0 = ax[v, 0].pcolormesh(X, Y, C, shading='auto', cmap=cmap, vmin=0.0, vmax=1.0)
         
-        contour_levels = [0.0195]  # Adjust these levels as needed
+        contour_levels = [0.0195]
         if v == 2:
             contour_levels = [0.07]
         if v == 3:
@@ -160,53 +198,244 @@ def plot_panel_homogeneous_thresholds_heatmaps(
         plt.savefig(full_name, format=ext, bbox_inches='tight')
     plt.clf()
 
-def plot_panel_survey_thresholds_vaccination_curves(
-        path_cwd, 
-        path_relative='results/curated',
+def plot_panel_homogeneous_thresholds_sections(
+        model_region='National', 
+        model_opinion='HOT',
+        model_hesitancy='RAN',
+        target_vaccination=None,
+        target_zealot=0.0, 
+        path_cwd=os.getcwd(),
+        path_relative_source='results/curated',
+        cutoff_prevalence = 0.05,
         ):
-    target_observable_list = ['convinced', 'prevalence', 'vaccinated']
 
-    vaccination_data = ut.load_vaccination_data(cwd_path)
+    path_full_source = os.path.join(path_cwd, path_relative_source)
+    list_filenames = ut.collect_filenames(
+        path_search=path_full_source, 
+        header='global__', 
+        string_segments=[model_region, model_opinion, model_hesitancy], 
+        extension='.json',
+        )
 
-    header = 'global__'
-
-    path_full_source = os.path.join(path_cwd, path_relative)
-    list_filenames = ut.collect_pickle_filenames(fullpath=path_full_source, header=header)
-
-    results_dict = {}
+    dict_results = {}
 
     for i, filename in enumerate(list_filenames):
-        print("Loop {0}. Filename: {1}".format(i + 1, filename))
+        fullname = os.path.join(path_cwd, path_relative_source, filename)
 
-        fullname = os.path.join(path_full_source, filename)
+        size = int(filename.split('_n')[1].split('_')[0])
+        fa = float(filename.split('_fa')[1].split('_')[0])
+        th = float(filename.split('_th')[1].split('_')[0])
+        rv = float(filename.split('_rv')[1].split('_')[0])
+        fz = float(filename.split('_fz')[1].split('_')[0])
 
-        state_string = filename.split('_3_')[1].split('_')[0]
-        var_value = float(filename.split('_var')[1].split('_')[0])
+        if fz == target_zealot and rv in target_vaccination:
+            with open(fullname, 'rb') as input_data:
+                dict_output = pk.load(input_data)
 
-        before, after = ut.find_nth_occurrence(filename, '_n', 2)
-        n = int(after.split('_')[0])
+            key_pars = (fa, th, rv, fz)
 
-        output = ut.load_output(fullname, ['global'], target_observable_list)
+            if key_pars not in dict_results:
+                dict_results[key_pars] = {'convinced': [], 'prevalence': [], 'vaccinated': []}
 
-        prevalence_s = np.array(output['prevalence']) / n
-        failed_outbreaks = ut.extract_failed_outbreaks(prevalence_s, prevalence_cutoff=prevalence_cutoff)
+            array_convinced = dict_output['global']['convinced']
+            array_prevalence = dict_output['global']['prevalence']
+            array_vaccinated = dict_output['global']['vaccinated']
 
-        processed_dict = {}
-        for key, val in output.items():
-            val = np.array(val) / n
-            filt_obs = ut.filter_observable_array(observable_distribution=val, failed_outbreaks=failed_outbreaks)
-            if len(filt_obs) > 0:
-                stat_obs = ut.stat_observable(filt_obs)
-                processed_dict[key] = stat_obs
-            else:
-                stat_obs = ut.stat_observable(val)
-                processed_dict[key] = stat_obs
+            for idx, prevalence in enumerate(array_prevalence):
+                if (prevalence / size) >= cutoff_prevalence:
+                    dict_results[key_pars]['convinced'].append(array_convinced[idx] / size)
+                    dict_results[key_pars]['prevalence'].append(array_prevalence[idx] / size)
+                    dict_results[key_pars]['vaccinated'].append(array_vaccinated[idx] / size)
 
-        if state_string not in results_dict:
-            results_dict[state_string] = {}
+    dict_stats = {}
+    for key_pars, results in dict_results.items():
+        dict_stats[key_pars] = {
+            'convinced': {
+                'mean': np.nanmean(results['convinced']) if results['convinced'] else float('nan'),
+                'std': np.nanstd(results['convinced']) if results['convinced'] else float('nan'),
+                },
+            'prevalence': {
+                'mean': np.nanmean(results['prevalence']) if results['prevalence'] else float('nan'),
+                'std': np.nanstd(results['prevalence']) if results['prevalence'] else float('nan'),
+                },
+            'vaccinated': {
+                'mean': np.nanmean(results['vaccinated']) if results['vaccinated'] else float('nan'),
+                'std': np.nanstd(results['vaccinated']) if results['vaccinated'] else float('nan'),
+            }
+        }
 
-        if var_value not in results_dict[state_string]:
-            results_dict[state_string][var_value] = processed_dict
+    fa_values = set()
+    th_values = set()
+    rv_values = set()
+
+    for key in dict_results.keys():
+        fa, th, rv, fz = key
+        fa_values.add(fa)
+        th_values.add(th)
+        rv_values.add(rv)
+
+    array_control_fa = np.array(sorted(fa_values))
+    array_control_th = np.array(sorted(th_values))
+    array_control_rv = np.array(sorted(rv_values))
+
+    norm = Normalize(vmin=min(array_control_fa), vmax=max(array_control_fa))
+    cmap = cm.viridis
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+
+    fig, ax = plt.subplots(nrows=3, ncols=4, figsize=(20, 18))
+
+    for v, rv in enumerate(array_control_rv):
+        len_th = len(array_control_th)
+        len_fa = len(array_control_fa)
+
+        C = np.zeros((len_fa, len_th))
+        R = np.zeros((len_fa, len_th))
+        V = np.zeros((len_fa, len_th))
+
+        for j, fa in enumerate(array_control_fa):
+            for i, th in enumerate(array_control_th):
+                if (th, fa, rv, fz) in dict_stats:
+
+                    R[j][i] = dict_stats[(fa, th, rv, fz)]['prevalence']['mean']
+                    V[j][i] = dict_stats[(fa, th, rv, fz)]['vaccinated']['mean']
+
+                    max_change = 1.0 - fa
+                    norm_change = (dict_stats[(fa, th, rv, fz)]['convinced']['mean'] - fa) / max_change
+                    if fa == 1.0:
+                        norm_change = 0.0
+                    C[j][i] = norm_change
+                else:
+                    R[j][i] = np.nan
+                    V[j][i] = np.nan
+                    C[j][i] = np.nan
+
+            ax[0, v].plot(array_control_th, C[j], color=sm.to_rgba(fa))
+            ax[1, v].plot(array_control_th, V[j], color=sm.to_rgba(fa))
+            ax[2, v].plot(array_control_th, R[j], color=sm.to_rgba(fa))
+
+        ax[0, v].set_title(r'$\alpha=${0}'.format(rv), fontsize=40)
+
+    for i in range(3):
+        subplot_bottom = ax[i, 0].get_position().y0
+        subplot_height = ax[i, 0].get_position().height
+    
+        cbar_ax = fig.add_axes([0.99, subplot_bottom, 0.01, subplot_height])
+        #cbar_ax = fig.add_axes([0.99, 0.7 - i*0.3, 0.01, 0.3])
+        fig.colorbar(sm, cax=cbar_ax, label=r'$n_A(0)$')
+
+    ax[0, 0].set_ylabel(r"$\Delta n_A(\infty)$", fontsize=35)
+    ax[1, 0].set_ylabel(r"$v(\infty)$", fontsize=35)
+    ax[2, 0].set_ylabel(r"$r(\infty)$", fontsize=35)
+
+    ax[-1, 0].set_xlabel(r'$\theta$', fontsize=30)
+    ax[-1, 1].set_xlabel(r'$\theta$', fontsize=30)
+    ax[-1, 2].set_xlabel(r'$\theta$', fontsize=30)
+    ax[-1, 3].set_xlabel(r'$\theta$', fontsize=30)
+
+    ax[0, 0].text(0.04, 0.8, r"a1", transform=ax[0, 0].transAxes, fontsize=30, color='black', weight="bold")
+    ax[0, 1].text(0.04, 0.8, r"a2", transform=ax[0, 1].transAxes, fontsize=30, color='black', weight="bold")
+    ax[0, 2].text(0.04, 0.8, r"a3", transform=ax[0, 2].transAxes, fontsize=30, color='black', weight="bold")
+    ax[0, 3].text(0.04, 0.8, r"a4", transform=ax[0, 3].transAxes, fontsize=30, color='black', weight="bold")
+    
+    ax[1, 0].text(0.04, 0.8, r"b1", transform=ax[1, 0].transAxes, fontsize=30, color='black', weight="bold")
+    ax[1, 1].text(0.04, 0.8, r"b2", transform=ax[1, 1].transAxes, fontsize=30, color='black', weight="bold")
+    ax[1, 2].text(0.04, 0.8, r"b3", transform=ax[1, 2].transAxes, fontsize=30, color='black', weight="bold")
+    ax[1, 3].text(0.04, 0.8, r"b4", transform=ax[1, 3].transAxes, fontsize=30, color='black', weight="bold")
+
+    ax[2, 0].text(0.04, 0.8, r"c1", transform=ax[2, 0].transAxes, fontsize=30, color='black', weight="bold")
+    ax[2, 1].text(0.04, 0.8, r"c2", transform=ax[2, 1].transAxes, fontsize=30, color='black', weight="bold")
+    ax[2, 2].text(0.04, 0.8, r"c3", transform=ax[2, 2].transAxes, fontsize=30, color='black', weight="bold")
+    ax[2, 3].text(0.04, 0.8, r"c4", transform=ax[2, 3].transAxes, fontsize=30, color='black', weight="bold")
+
+    for axis in ax.flatten():
+        axis.tick_params(axis='both', labelsize=18)
+
+    plt.rcParams.update({'font.size': 15})
+    plt.rc('axes', labelsize=20)
+    plt.rcParams['xtick.labelsize'] = 20
+    plt.rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.tight_layout()
+
+    path_full_target = os.path.join(path_cwd, 'figures')
+    filename_target = 'threshold_main_homogeneous_sections' 
+    extension_list = ['pdf', 'png']
+    if not os.path.exists(path_full_target):
+        os.makedirs(path_full_target)
+    for ext in extension_list:
+        full_name = os.path.join(path_full_target, filename_target + '.' + ext)
+        plt.savefig(full_name, format=ext, bbox_inches='tight')
+    plt.clf()
+
+def plot_panel_survey_thresholds_vaccination_curves(
+        model_opinion='DataDriven',
+        path_cwd=os.getcwd(),
+        path_relative_source='results/curated',
+        cutoff_prevalence=0.01,
+        ):
+
+    path_full_source = os.path.join(path_cwd, path_relative_source)
+    list_filenames = ut.collect_filenames(
+        path_search=path_full_source, 
+        header='global__', 
+        string_segments=[model_opinion], 
+        extension='.json',
+        )
+
+    dict_results = {}
+    
+    dict_state_attitude = ut.load_vaccination_data(path_cwd)
+
+    for i, filename in enumerate(list_filenames):
+        fullname = os.path.join(path_cwd, path_relative_source, filename)
+
+        model_region = filename.split('ml')[1].split('_')[0]
+        size = int(filename.split('_n')[1].split('_')[0])
+        rv = float(filename.split('_rv')[1].split('_')[0])
+        
+        with open(fullname, 'rb') as input_data:
+            dict_output = pk.load(input_data)
+
+            if model_region not in dict_results:
+                dict_results[model_region] = {}
+
+            if rv not in dict_results[model_region]:
+                dict_results[model_region][rv] = {'convinced': [], 'prevalence': [], 'vaccinated': []}
+        
+            array_convinced = dict_output['global']['convinced']
+            array_prevalence = dict_output['global']['prevalence']
+            array_vaccinated = dict_output['global']['vaccinated']
+
+            for idx, prevalence in enumerate(array_prevalence):
+                if (prevalence / size) >= cutoff_prevalence:
+                    dict_results[model_region][rv]['convinced'].append(array_convinced[idx] / size)
+                    dict_results[model_region][rv]['prevalence'].append(array_prevalence[idx] / size)
+                    dict_results[model_region][rv]['vaccinated'].append(array_vaccinated[idx] / size)
+
+    dict_stats = {}
+    for model_region, rvs in dict_results.items():
+        dict_stats[model_region] = {}
+        for rv, state_results in rvs.items():
+            convinced_data = state_results['convinced']
+            prevalence_data = state_results['prevalence']
+            vaccinated_data = state_results['vaccinated']
+
+            def calc_stats(data):
+                if not data: 
+                    return {'avg': float('nan'), 'std': float('nan'), 'l95': float('nan'), 'u95': float('nan')}
+                mean = np.nanmean(data)
+                std = np.nanstd(data)
+                n = len(data)
+                sem = std / np.sqrt(n)
+                l95 = mean - 1.96 * sem
+                u95 = mean + 1.96 * sem
+                return {'avg': mean, 'std': std, 'l95': l95, 'u95': u95}
+
+            dict_stats[model_region][rv] = {
+                'convinced': calc_stats(convinced_data),
+                'prevalence': calc_stats(prevalence_data),
+                'vaccinated': calc_stats(vaccinated_data),
+            }
 
     fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(18, 8))
 
@@ -214,36 +443,36 @@ def plot_panel_survey_thresholds_vaccination_curves(
     vmax = 0.65
     norm = Normalize(vmin=vmin, vmax=vmax)
 
-    for state_idx, state_key in enumerate(results_dict.keys()):
-        var_values = sorted(results_dict[state_key].keys())
+    for _, state_key in enumerate(dict_stats.keys()):
+        var_values = sorted(dict_stats[state_key].keys())
 
-        stats_values = [results_dict[state_key][var_key] for var_key in var_values]
+        stats_values = [dict_stats[state_key][var_key] for var_key in var_values]
 
-        conv_avg_w1 = np.array([obs['convinced']['avg'] if 'convinced' in obs and 'avg' in obs['convinced'] else np.nan for obs in list(stats_values)])
-        conv_l95_w1 = np.array([obs['convinced']['l95'] if 'convinced' in obs and 'l95' in obs['convinced'] else np.nan for obs in list(stats_values)])
-        conv_u95_w1 = np.array([obs['convinced']['u95'] if 'convinced' in obs and 'u95' in obs['convinced'] else np.nan for obs in list(stats_values)])
+        conv_avg = np.array([obs['convinced']['avg'] if 'convinced' in obs and 'avg' in obs['convinced'] else np.nan for obs in list(stats_values)])
+        conv_l95 = np.array([obs['convinced']['l95'] if 'convinced' in obs and 'l95' in obs['convinced'] else np.nan for obs in list(stats_values)])
+        conv_u95 = np.array([obs['convinced']['u95'] if 'convinced' in obs and 'u95' in obs['convinced'] else np.nan for obs in list(stats_values)])
 
-        vac_shares = vaccination_data[state_key]
+        vac_shares = dict_state_attitude[state_key]
         already = vac_shares['already']
         soon = vac_shares['soon']
         initial_support = already + soon
         zealots = vac_shares['never']
 
-        already = vaccination_data[state_key]['already']
-        soon = vaccination_data[state_key]['soon']  
+        already = dict_state_attitude[state_key]['already']
+        soon = dict_state_attitude[state_key]['soon']  
 
         max_change = 1.0 - (already + soon + zealots)
-        delta_con_avg = [(con - initial_support) / max_change for con in conv_avg_w1]
-        delta_con_l95 = [(con - initial_support) / max_change for con in conv_l95_w1]
-        delta_con_u95 = [(con - initial_support) / max_change for con in conv_u95_w1]
+        delta_con_avg = [(con - initial_support) / max_change for con in conv_avg]
+        delta_con_l95 = [(con - initial_support) / max_change for con in conv_l95]
+        delta_con_u95 = [(con - initial_support) / max_change for con in conv_u95]
 
         vacc_avg = np.array([obs['vaccinated']['avg'] if 'vaccinated' in obs and 'avg' in obs['vaccinated'] else np.nan for obs in list(stats_values)])
         vacc_l95 = np.array([obs['vaccinated']['l95'] if 'vaccinated' in obs and 'l95' in obs['vaccinated'] else np.nan for obs in list(stats_values)])
         vacc_u95 = np.array([obs['vaccinated']['u95'] if 'vaccinated' in obs and 'u95' in obs['vaccinated'] else np.nan for obs in list(stats_values)])
 
-        prev_avg_w1 = np.array([obs['prevalence']['avg'] if 'prevalence' in obs and 'avg' in obs['prevalence'] else np.nan for obs in list(stats_values)])
-        prev_l95_w1 = np.array([obs['prevalence']['l95'] if 'prevalence' in obs and 'l95' in obs['prevalence'] else np.nan for obs in list(stats_values)])
-        prev_u95_w1 = np.array([obs['prevalence']['u95'] if 'prevalence' in obs and 'u95' in obs['prevalence'] else np.nan for obs in list(stats_values)])
+        prev_avg = np.array([obs['prevalence']['avg'] if 'prevalence' in obs and 'avg' in obs['prevalence'] else np.nan for obs in list(stats_values)])
+        prev_l95 = np.array([obs['prevalence']['l95'] if 'prevalence' in obs and 'l95' in obs['prevalence'] else np.nan for obs in list(stats_values)])
+        prev_u95 = np.array([obs['prevalence']['u95'] if 'prevalence' in obs and 'u95' in obs['prevalence'] else np.nan for obs in list(stats_values)])
 
         color = plt.cm.viridis(norm(initial_support))
 
@@ -251,12 +480,12 @@ def plot_panel_survey_thresholds_vaccination_curves(
         ax[0].fill_between(var_values, delta_con_l95, delta_con_u95, color=color, alpha=0.2)
         ax[1].scatter(var_values, vacc_avg, color=color)
         ax[1].fill_between(var_values, vacc_l95, vacc_u95, color=color, alpha=0.2)
-        ax[2].scatter(var_values, prev_avg_w1, color=color)
-        ax[2].fill_between(var_values, prev_l95_w1, prev_u95_w1, color=color, alpha=0.2)
+        ax[2].scatter(var_values, prev_avg, color=color)
+        ax[2].fill_between(var_values, prev_l95, prev_u95, color=color, alpha=0.2)
         ax[2].axvline(0.09,linestyle='dashed', color='gray')
 
         state_code = ut.extract_code_from_state(state_key)
-        ut.write_annotations_vaccination_curves(state_code, ax,  var_values, vacc_avg, prev_avg_w1)
+        ut.write_annotations_vaccination_curves(state_code, ax,  var_values, vacc_avg, prev_avg)
 
     cbar_ml = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='viridis'), ax=ax[2], orientation='vertical')
     cbar_ml.set_label(r'$v(0)+n_A(0)$', size=25)
@@ -269,9 +498,9 @@ def plot_panel_survey_thresholds_vaccination_curves(
     ax[1].set_title(r"$v(\infty)$", fontsize=30)
     ax[2].set_title(r"$r(\infty)$", fontsize=30)
 
-    ax[0].text(0.04, 0.9, r"A", transform=ax[0].transAxes, fontsize=30, color='black', weight="bold")
-    ax[1].text(0.04, 0.9, r"B", transform=ax[1].transAxes, fontsize=30, color='black', weight="bold")
-    ax[2].text(0.04, 0.9, r"C", transform=ax[2].transAxes, fontsize=30, color='black', weight="bold")
+    ax[0].text(0.04, 0.9, r"a", transform=ax[0].transAxes, fontsize=30, color='black', weight="bold")
+    ax[1].text(0.04, 0.9, r"b", transform=ax[1].transAxes, fontsize=30, color='black', weight="bold")
+    ax[2].text(0.04, 0.9, r"c", transform=ax[2].transAxes, fontsize=30, color='black', weight="bold")
 
     ax[0].set_xlabel(r'$\alpha$', fontsize=30)
     ax[1].set_xlabel(r'$\alpha$', fontsize=30)
@@ -281,7 +510,7 @@ def plot_panel_survey_thresholds_vaccination_curves(
     ax[1].set_xscale('log')
     ax[2].set_xscale('log')
 
-    ax[0].set_ylabel(r'population fraction', fontsize=30)
+    ax[0].set_ylabel(r'Population fraction', fontsize=30)
 
     ax[0].tick_params(axis='both', which='major', labelsize=15)
     ax[0].tick_params(axis='both', labelsize=15)
@@ -309,7 +538,8 @@ def plot_panel_survey_thresholds_vaccination_curves(
     for ext in extension_list:
         full_name = os.path.join(path_full_target, filename_target + '.' + ext)
         plt.savefig(full_name, format=ext, bbox_inches='tight')
-    plt.clf()
+    
+    plt.show()
 
 def plot_state_age_structure_data(
         model_region, 

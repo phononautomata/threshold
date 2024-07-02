@@ -17,7 +17,7 @@ def collect_filenames(list_id_region, size, path_storage=path_base):
             print(f"Directory {path_search_source} does not exist.")
             continue
         
-        filenames = [filename for filename in os.listdir(path_search_source)
+        filenames = [os.path.splitext(filename)[0] for filename in os.listdir(path_search_source)
                      if filename.startswith(f'ml{id_region}_n{size}') and filename.endswith('.pickle')]
         all_filenames.extend(filenames)
     

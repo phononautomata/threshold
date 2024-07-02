@@ -138,7 +138,7 @@ def collect_age_structure_data(path=cwd_path, lower_path='data'):
     with open(full_name, 'w') as file:
         json.dump(degree_distribution_dict, file)
 
-def collect_filenames(path_search, header=None, string_segments=None, extension=None):
+def collect_filenames(path_search, header=None, string_segments=None, extension='.json'):
     file_list = os.listdir(path_search)
 
     result = []
@@ -564,17 +564,17 @@ def load_output(fullname, main_keys, observable_keys):
     return output_dict
 
 def load_vaccination_data(
-        cwd_path, 
-        lower_path='data', 
+        path_cwd, 
+        path_relative_source='data/curated', 
         file_name='vaccination_attitude_data.json'
         ):
-    full_path = os.path.join(cwd_path, lower_path, file_name)
+    full_path = os.path.join(path_cwd, path_relative_source, file_name)
     with open(full_path, 'r') as f:
         data = json.load(f)
 
-    results = {}
+    dict_state_attitudes = {}
     for state, values in data.items():
-        results[state] = {
+        dict_state_attitudes[state] = {
             "already": values[0],
             "soon": values[1],
             "someone": values[2],
@@ -582,7 +582,7 @@ def load_vaccination_data(
             "never": values[4]
         }
 
-    return results
+    return dict_state_attitudes
 
 def plot_regression(ax, x, y, v, i):
     x_array = np.array(x).reshape(-1, 1)
@@ -629,7 +629,6 @@ def sir_prevalence(r0):
 
 def stat_global_results(model_region, value_af, value_th, value_vr, path_cwd):
     pass
-
 
 def stat_global_output(output_dict):
     stat_dict = {}

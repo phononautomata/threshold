@@ -18,6 +18,7 @@ list_model_region=(
     colorado
     connecticut
     delaware
+    district-of-columbia
     florida
     georgia
     hawaii

@@ -1,46 +1,45 @@
 #!/bin/bash
 
-VENV_PATH="/home/alfonso/threshold/.threshold"
-
-if [ -f "${VENV_PATH}/bin/activate" ]; then
-    source "${VENV_PATH}/bin/activate"
-    echo "Activated virtual environment."
-    echo "Using Python at $(which python3)"
-else
-    echo "Virtual environment not found."
+PYTHON=$(which python3)
+if [ ! -x "$PYTHON" ]; then
+    echo "Python interpreter not found."
     exit 1
 fi
 
-PYTHON="${VENV_PATH}/bin/python3"
-echo "Python path from virtual environment: $($PYTHON -c 'import sys; print(sys.path)')"
+echo "Using Python at $PYTHON"
+echo "Python path: $($PYTHON -c 'import sys; print(sys.path)')"
 
 base_path=$(cd "$(dirname "$0")"/.. && pwd)
 script_folder="scripts"
 
+list_id_region=(
+    Alabama Alaska Arizona Arkansas California Colorado Connecticut Delaware DistrictOfColumbia Florida 
+    Georgia Hawaii Idaho Illinois Indiana Iowa Kansas Kentucky Louisiana Maine 
+    Maryland Massachusetts Michigan Minnesota Mississippi Missouri Montana Nebraska Nevada NewHampshire 
+    NewJersey NewMexico NewYork NorthCarolina NorthDakota Ohio Oklahoma Oregon Pennsylvania RhodeIsland 
+    SouthCarolina SouthDakota Tennessee Texas Utah Vermont Virginia Washington WestVirginia Wisconsin 
+    Wyoming National
+)
+
+size=100000
+
 list_uuid=()
 
-id_region="national"
-size=100000
-storage_path=true
+id_region_str=$(IFS=" "; echo "${list_id_region[*]}")
 
-# Collecting network UUIDs
+echo "Running Python script to collect UUIDs..."
+python_output=$($PYTHON "${base_path}/${script_folder}/collect_networks.py" --id_region $id_region_str --size "$size")
+echo "Python script output:"
+echo "$python_output"
+
 while IFS= read -r line; do
     list_uuid+=("$line")
-done < <($PYTHON "${base_path}/${script_folder}/collect_networks.py" --id_region "$id_region" --size "$size" --path_storage "$storage_path")
+done <<< "$python_output"
 
 if [ ${#list_uuid[@]} -eq 0 ]; then
     echo "No UUIDs found for the given parameters."
     exit 1
 fi
-
-list_model_region=(
-    alabama alaska arizona arkansas california colorado connecticut delaware florida georgia
-    hawaii idaho illinois indiana iowa kansas kentucky louisiana maine maryland massachusetts
-    michigan minnesota mississippi missouri montana nebraska nevada new-hampshire new-jersey
-    new-mexico new-york north-carolina north-dakota ohio oklahoma oregon pennsylvania
-    rhode-island south-carolina south-dakota tennessee texas utah vermont virginia washington
-    west-virginia wisconsin wyoming national
-)
 
 a=0.0001
 b=1.0
@@ -52,12 +51,8 @@ for ((i=1; i<=n; i++)); do
   list_rate_vaccination+=($value)
 done
 
-# Removed the second initialization of list_uuid
-# Iterate over combinations of parameters and run jobs in parallel
-for region in "${list_model_region[@]}"; do
-    for uuid in "${list_uuid[@]}"; do
-        for vaccination in "${list_rate_vaccination[@]}"; do
-            echo "$region $size $uuid $vaccination"
-        done
+for uuid in "${list_uuid[@]}"; do
+    for vaccination in "${list_rate_vaccination[@]}"; do
+        echo "$uuid $vaccination"
     done
-done | parallel --colsep ' ' --jobs 60 --progress --nice 10 "${base_path}/${script_folder}/launch_datadriven_threshold.sh" {1} {2} {3} {4}
+done | parallel --colsep ' ' --jobs 60 --progress --nice 10 "${base_path}/${script_folder}/launch_datadriven_threshold.sh" {1} {2}

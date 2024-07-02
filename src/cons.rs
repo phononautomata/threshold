@@ -63,7 +63,8 @@ pub const PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF: f64 = 0.0;
 pub const PAR_TIME_STEP: usize = 1;
 
 pub const PATH_DATA_MULTILAYER_PEPINO: &str = "/data/alfonso/threshold/data/curated/networks";
-pub const PATH_DATA_MULTILAYER_LOCAL: &str = "/Users/alfonso/workshop/threshold/data/curated/networks";
+pub const PATH_DATA_MULTILAYER_LOCAL: &str =
+    "/Users/alfonso/workshop/threshold/data/curated/networks";
 pub const PATH_RESULTS_TEMP: &str = "/data/alfonso/threshold/results/temp";
 pub const PATH_RESULTS_CURATED_PEPINO: &str = "/data/alfonso/threshold/results/curated";
 pub const PATH_RESULTS_CURATED_LOCAL: &str = "/Users/alfonso/workshop/threshold/results/curated";

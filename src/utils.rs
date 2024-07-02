@@ -17,7 +17,12 @@ use crate::agent::{
     VaccinationPolicy,
 };
 use crate::cons::{
-    CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS_PICKLE, FOLDER_DATA_CURATED, FOLDER_RESULTS, HEADER_AGE, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_ATTITUDE, HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_DEGREE, HEADER_GLOBAL, HEADER_PROJECT, HEADER_TIME, HEADER_TIME_STATS, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE, PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF, PATH_RESULTS_CURATED_LOCAL
+    CONST_EPIDEMIC_THRESHOLD, EXTENSION_RESULTS_PICKLE, FOLDER_DATA_CURATED, FOLDER_RESULTS,
+    HEADER_AGE, HEADER_AGENT_DISTRIBUTION, HEADER_AGENT_STATS, HEADER_ATTITUDE,
+    HEADER_CLUSTER_DISTRIBUTION, HEADER_CLUSTER_STATS, HEADER_DEGREE, HEADER_GLOBAL,
+    HEADER_PROJECT, HEADER_TIME, HEADER_TIME_STATS, INIT_ATTITUDE, INIT_STATUS, INIT_USIZE,
+    PAR_AGE_GROUPS, PAR_ATTITUDE_GROUPS, PAR_NBINS, PAR_OUTBREAK_PREVALENCE_FRACTION_CUTOFF,
+    PATH_RESULTS_CURATED_LOCAL,
 };
 
 #[derive(Clone, Copy, Serialize, Deserialize, Display, Debug, clap::ValueEnum, PartialEq, Eq)]
@@ -1833,10 +1838,7 @@ impl OutputEnsemble {
 
             let serialized = serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
 
-            let string_result = format!(
-                "{}_{}_{}",
-                HEADER_AGE, string_multilayer, string_epidemic
-            );
+            let string_result = format!("{}_{}_{}", HEADER_AGE, string_multilayer, string_epidemic);
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
@@ -1936,10 +1938,7 @@ impl OutputEnsemble {
 
             let serialized = serde_pickle::to_vec(&output_to_serialize, SerOptions::new()).unwrap();
 
-            let string_result = format!(
-                "degree_{}_{}",
-                string_multilayer, string_epidemic
-            );
+            let string_result = format!("degree_{}_{}", string_multilayer, string_epidemic);
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
@@ -1972,10 +1971,8 @@ impl OutputEnsemble {
             let serialized =
                 serde_pickle::to_vec(&assembled_time_series, SerOptions::new()).unwrap();
 
-            let string_result = format!(
-                "{}_{}_{}",
-                HEADER_TIME, string_multilayer, string_epidemic
-            );
+            let string_result =
+                format!("{}_{}_{}", HEADER_TIME, string_multilayer, string_epidemic);
 
             let mut path = PathBuf::from(PATH_RESULTS_CURATED_LOCAL);
             path.push(format!("{}{}", string_result, EXTENSION_RESULTS_PICKLE));
@@ -2741,10 +2738,7 @@ fn compute_cluster_stats(
     }
 }
 
-fn compute_fractions(
-    numerators: &[Vec<usize>],
-    denominators: &[Vec<usize>],
-) -> Vec<Vec<f64>> {
+fn compute_fractions(numerators: &[Vec<usize>], denominators: &[Vec<usize>]) -> Vec<Vec<f64>> {
     numerators
         .iter()
         .zip(denominators.iter())
@@ -2795,7 +2789,7 @@ fn compute_stats(values: &Vec<Vec<f64>>) -> StatPacker {
 }
 
 pub fn construct_string_epidemic(model_pars: &InputMultilayer) -> String {
-    format!("ua{0}_fa{1}_th{2}_rv{3}_fz{4}_mh{5}_mo{6}_ms{7}_nse{8}_nsi{9}_pv{10}_qv{11}_r0{12}_rr{13}_tm{14}_ta{15}",
+    format!("ua{0}_fa{1:.2}_th{2:.2}_rv{3}_fz{4:.2}_mh{5}_mo{6}_ms{7}_nse{8}_nsi{9}_pv{10}_qv{11}_r0{12}_rr{13}_tm{14}_ta{15}",
         model_pars.flag_underage,
         model_pars.fraction_active,
         model_pars.threshold_opinion,
@@ -2857,10 +2851,7 @@ fn construct_file_path(
     )))
 }
 
-fn convert_enum_hesitancy_to_string(
-    model_hesitancy: HesitancyModel,
-    flag_short: bool,
-) -> String {
+fn convert_enum_hesitancy_to_string(model_hesitancy: HesitancyModel, flag_short: bool) -> String {
     match model_hesitancy {
         HesitancyModel::Adult => {
             if flag_short {
@@ -2928,10 +2919,7 @@ fn convert_enum_hesitancy_to_string(
     }
 }
 
-fn convert_enum_opinion_to_string(
-    model_opinion: OpinionModel, 
-    flag_short: bool,
-) -> String {
+fn convert_enum_opinion_to_string(model_opinion: OpinionModel, flag_short: bool) -> String {
     match model_opinion {
         OpinionModel::DataDrivenThresholds => {
             if flag_short {
@@ -2971,10 +2959,7 @@ fn convert_enum_opinion_to_string(
     }
 }
 
-fn convert_enum_seed_to_string(
-    model_seed: SeedModel, 
-    flag_short: bool,
-) -> String {
+fn convert_enum_seed_to_string(model_seed: SeedModel, flag_short: bool) -> String {
     match model_seed {
         SeedModel::BottomDegreeNeighborhood => {
             if flag_short {
@@ -3023,7 +3008,7 @@ fn convert_enum_seed_to_string(
 
 fn convert_enum_vaccination_to_string(
     model_vaccination: VaccinationPolicy,
-    flag_short: bool
+    flag_short: bool,
 ) -> String {
     match model_vaccination {
         VaccinationPolicy::AgeAdult => {
@@ -3124,7 +3109,7 @@ fn convert_enum_vaccination_to_string(
                 "DegreeTop".to_owned()
             }
         }
-        VaccinationPolicy::Random=> {
+        VaccinationPolicy::Random => {
             if flag_short {
                 "RAN".to_owned()
             } else {
@@ -3194,7 +3179,9 @@ pub fn create_output_files(
     Ok(output_file_map)
 }
 
-pub fn extract_region_and_nagents(input: &str) -> Result<(Region, usize), Box<dyn std::error::Error>> {
+pub fn extract_region_and_nagents(
+    input: &str,
+) -> Result<(Region, usize), Box<dyn std::error::Error>> {
     let re = Regex::new(r"ml([A-Za-z\-]+)_n(\d+)_")?;
     let mut region_map: HashMap<&str, Region> = HashMap::new();
 

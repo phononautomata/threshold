@@ -184,6 +184,9 @@ def convert_string_state_to_rust_enum_format(state):
     formatted_state = ''.join(word.capitalize() for word in words)
     return formatted_state
 
+def count_fraction_underage(array_population):
+    return np.sum(array_population[0:18])
+
 def average_degree_distribution(contact, pop_a, norm_flag=False):
     degree_a = np.sum(contact, axis=1)
     pdf = np.zeros(len(degree_a))

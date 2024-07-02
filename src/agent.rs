@@ -303,11 +303,11 @@ impl Agent {
             let agent = &agent_ensemble.inner()[neigh];
             let status = agent.status;
             let neigh_threshold = agent.threshold;
-        
+
             if neigh_threshold < threshold {
                 cascading_count += 1;
             }
-        
+
             if neigh_threshold >= 1.0 {
                 zealots += 1;
             } else {
@@ -1224,8 +1224,13 @@ impl AgentEnsemble {
         }
     }
 
-    pub fn introduce_vaccination_attitudes(&mut self, vpars: &VaccinationPars) {
-        let hesitancy_model = vpars.model_hesitancy;
+    pub fn introduce_vaccination_attitudes(
+        &mut self,
+        vpars: &VaccinationPars,
+        model_opinion: OpinionModel,
+        threshold_opinion: f64,
+    ) {
+        let model_hesitancy = vpars.model_hesitancy;
         let nagents = self.number_of_agents();
 
         let already_count = (vpars.fraction_vaccinated * nagents as f64) as i32;
@@ -1242,7 +1247,7 @@ impl AgentEnsemble {
 
         let age_threshold = vpars.threshold_age;
 
-        match hesitancy_model {
+        match model_hesitancy {
             HesitancyModel::Adult => {
                 todo!()
             }
@@ -1277,7 +1282,12 @@ impl AgentEnsemble {
                     } else if soon_assigned < soon_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Soon);
                         self.inner_mut()[i].status = Status::ActSus;
-                        self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
+                        self.inner_mut()[i].threshold =
+                            if model_opinion == OpinionModel::DataDrivenThresholds {
+                                CONST_SOON_THRESHOLD
+                            } else {
+                                threshold_opinion
+                            };
                         soon_assigned += 1;
                     } else if already_assigned < already_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1299,7 +1309,12 @@ impl AgentEnsemble {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Soon);
                             self.inner_mut()[i].status = Status::ActSus;
-                            self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
+                            self.inner_mut()[i].threshold =
+                                if model_opinion == OpinionModel::DataDrivenThresholds {
+                                    CONST_SOON_THRESHOLD
+                                } else {
+                                    threshold_opinion
+                                };
                             soon_assigned += 1;
                         }
                     } else if someone_assigned < someone_count {
@@ -1348,7 +1363,12 @@ impl AgentEnsemble {
                     } else if soon_assigned < soon_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Soon);
                         self.inner_mut()[i].status = Status::ActSus;
-                        self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
+                        self.inner_mut()[i].threshold =
+                            if model_opinion == OpinionModel::DataDrivenThresholds {
+                                CONST_SOON_THRESHOLD
+                            } else {
+                                threshold_opinion
+                            };
                         soon_assigned += 1;
                     } else if already_assigned < already_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1387,7 +1407,12 @@ impl AgentEnsemble {
                     } else if soon_assigned < soon_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Soon);
                         self.inner_mut()[i].status = Status::ActSus;
-                        self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
+                        self.inner_mut()[i].threshold =
+                            if model_opinion == OpinionModel::DataDrivenThresholds {
+                                CONST_SOON_THRESHOLD
+                            } else {
+                                threshold_opinion
+                            };
                         soon_assigned += 1;
                     } else if already_assigned < already_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1409,7 +1434,12 @@ impl AgentEnsemble {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Soon);
                             self.inner_mut()[i].status = Status::ActSus;
-                            self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
+                            self.inner_mut()[i].threshold =
+                                if model_opinion == OpinionModel::DataDrivenThresholds {
+                                    CONST_SOON_THRESHOLD
+                                } else {
+                                    threshold_opinion
+                                };
                             soon_assigned += 1;
                         }
                     } else if someone_assigned < someone_count {
@@ -1451,7 +1481,12 @@ impl AgentEnsemble {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Soon);
                             self.inner_mut()[i].status = Status::ActSus;
-                            self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
+                            self.inner_mut()[i].threshold =
+                                if model_opinion == OpinionModel::DataDrivenThresholds {
+                                    CONST_SOON_THRESHOLD
+                                } else {
+                                    threshold_opinion
+                                };
                             soon_assigned += 1;
                         }
                     } else if someone_assigned < someone_count {
@@ -1509,7 +1544,12 @@ impl AgentEnsemble {
                     } else if soon_assigned < soon_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Soon);
                         self.inner_mut()[i].status = Status::ActSus;
-                        self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
+                        self.inner_mut()[i].threshold =
+                            if model_opinion == OpinionModel::DataDrivenThresholds {
+                                CONST_SOON_THRESHOLD
+                            } else {
+                                threshold_opinion
+                            };
                         soon_assigned += 1;
                     } else if already_assigned < already_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1531,7 +1571,12 @@ impl AgentEnsemble {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Soon);
                             self.inner_mut()[i].status = Status::ActSus;
-                            self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
+                            self.inner_mut()[i].threshold =
+                                if model_opinion == OpinionModel::DataDrivenThresholds {
+                                    CONST_SOON_THRESHOLD
+                                } else {
+                                    threshold_opinion
+                                };
                             soon_assigned += 1;
                         }
                     } else if someone_assigned < someone_count {
@@ -1580,7 +1625,12 @@ impl AgentEnsemble {
                     } else if soon_assigned < soon_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Soon);
                         self.inner_mut()[i].status = Status::ActSus;
-                        self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
+                        self.inner_mut()[i].threshold =
+                            if model_opinion == OpinionModel::DataDrivenThresholds {
+                                CONST_SOON_THRESHOLD
+                            } else {
+                                threshold_opinion
+                            };
                         soon_assigned += 1;
                     } else if already_assigned < already_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1593,7 +1643,12 @@ impl AgentEnsemble {
         }
     }
 
-    pub fn introduce_vaccination_thresholds(&mut self, vpars: &VaccinationPars) {
+    pub fn introduce_vaccination_thresholds(
+        &mut self,
+        vpars: &VaccinationPars,
+        model_opinion: OpinionModel,
+        threshold_opinion: f64,
+    ) {
         let nagents = self.number_of_agents();
         let mut indices: Vec<usize> = (0..nagents).collect();
         indices.shuffle(&mut rand::thread_rng());
@@ -1619,7 +1674,12 @@ impl AgentEnsemble {
             } else if soon_assigned < soon_count {
                 self.inner_mut()[i].attitude = Some(Attitude::Soon);
                 self.inner_mut()[i].status = Status::ActSus;
-                self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
+                self.inner_mut()[i].threshold =
+                    if model_opinion == OpinionModel::DataDrivenThresholds {
+                        CONST_SOON_THRESHOLD
+                    } else {
+                        threshold_opinion
+                    };
                 soon_assigned += 1;
             } else if someone_assigned < someone_count {
                 self.inner_mut()[i].attitude = Some(Attitude::Someone);

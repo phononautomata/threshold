@@ -44,8 +44,6 @@ pub struct Args {
     pub flag_output_global: bool,
     #[clap(long, value_parser, default_value_t = false)]
     pub flag_output_time: bool,
-    #[clap(long, value_parser, default_value_t = true)]
-    pub flag_underage: bool,
     #[clap(long, value_parser, default_value_t = 0.4)]
     pub fraction_active: f64,
     #[clap(long, value_parser, default_value_t = 0.0)]
@@ -62,7 +60,7 @@ pub struct Args {
     pub id_experiment: usize,
     #[clap(long, value_parser, default_value = "random")]
     pub model_hesitancy: HesitancyModel,
-    #[clap(long, value_parser, default_value = "homogeneous-thresholds")]
+    #[clap(long, value_parser, default_value = "data-driven-thresholds")]
     pub model_opinion: OpinionModel,
     #[clap(long, value_parser, default_value = "national")]
     pub model_region: Region,
@@ -70,7 +68,7 @@ pub struct Args {
     pub model_seed: SeedModel,
     #[clap(long, value_parser, default_value_t = 100000)]
     pub nagents: usize,
-    #[clap(long, value_parser, default_value_t = 3)]
+    #[clap(long, value_parser, default_value_t = 10)]
     pub nsims: usize,
     #[clap(long, value_parser, default_value_t = 5)]
     pub nseeds: usize,
@@ -82,7 +80,7 @@ pub struct Args {
     pub rate_infection: f64,
     #[clap(long, value_parser, default_value_t = 0.2)]
     pub rate_removal: f64,
-    #[clap(long, value_parser, default_value_t = 0.0)]
+    #[clap(long, value_parser, default_value_t = 0.001)]
     pub rate_vaccination: f64,
     #[clap(long, value_parser, default_value_t = 1.5)]
     pub r0: f64,
@@ -167,7 +165,6 @@ pub fn run_epidemic(args: Args) {
 
     let mut pars_model = match args.flag_config {
         false => InputMultilayer::new(
-            args.flag_underage,
             args.fraction_active,
             args.fraction_majority,
             args.fraction_someone,
@@ -202,39 +199,53 @@ pub fn run_epidemic(args: Args) {
     let node_ensemble = load_multilayer_object(&path_multilayer);
     let nagents = node_ensemble.number_of_nodes();
 
-    let mut agent_ensemble =
-        AgentEnsemble::new_from_multilayer(&node_ensemble, pars_model.model_opinion);
+    let mut agent_ensemble = AgentEnsemble::new_from_multilayer(
+        &node_ensemble,
+        pars_model.model_opinion,
+        pars_model.threshold_age,
+    );
 
     let population_filename = FILENAME_DATA_POPULATION_AGE;
     let population_vector: Vec<f64> =
         read_key_and_vecf64_from_json(model_region, population_filename);
 
-    let eligible_fraction = if args.flag_underage {
-        let underaged_fraction = count_underaged(&population_vector);
-        1.0 - underaged_fraction
-    } else {
-        pars_model.threshold_age = 0;
-        1.0
+    let eligible_fraction = match pars_model.model_opinion {
+        OpinionModel::DataDrivenThresholdsUnderage
+        | OpinionModel::HomogeneousThresholdsUnderage
+        | OpinionModel::HomogeneousZealotsUnderage
+        | OpinionModel::MajorityUnderage => {
+            let underaged_fraction = count_underaged(&population_vector);
+            1.0 - underaged_fraction
+        }
+        _ => {
+            pars_model.threshold_age = 0;
+            1.0
+        }
     };
 
-    if pars_model.model_opinion == OpinionModel::HomogeneousThresholds {
-        pars_model.fraction_soon = pars_model.fraction_active;
-        pars_model.fraction_zealot = 0.0;
-    } else if pars_model.model_opinion == OpinionModel::HomogeneousZealots {
-        pars_model.fraction_soon = pars_model.fraction_active;
-    } else if pars_model.model_opinion == OpinionModel::DataDrivenThresholds {
-        let dd_vac_filename = FILENAME_DATA_VACCINATION_ATTITUDE;
-        let fractions: Vec<f64> =
-            read_key_and_vecf64_from_json(pars_model.model_region, dd_vac_filename);
+    match pars_model.model_opinion {
+        OpinionModel::HomogeneousThresholds => {
+            pars_model.fraction_soon = pars_model.fraction_active;
+            pars_model.fraction_zealot = 0.0;
+        }
+        OpinionModel::HomogeneousZealots => {
+            pars_model.fraction_soon = pars_model.fraction_active;
+        }
+        OpinionModel::DataDrivenThresholds => {
+            let dd_vac_filename = FILENAME_DATA_VACCINATION_ATTITUDE;
+            let fractions: Vec<f64> =
+                read_key_and_vecf64_from_json(pars_model.model_region, dd_vac_filename);
 
-        pars_model.fraction_vaccinated = eligible_fraction * fractions[0];
-        pars_model.fraction_soon = eligible_fraction * fractions[1];
-        pars_model.fraction_someone = eligible_fraction * fractions[2];
-        pars_model.fraction_majority = eligible_fraction * fractions[3];
-        pars_model.fraction_zealot = eligible_fraction * fractions[4];
+            pars_model.fraction_vaccinated = eligible_fraction * fractions[0];
+            pars_model.fraction_soon = eligible_fraction * fractions[1];
+            pars_model.fraction_someone = eligible_fraction * fractions[2];
+            pars_model.fraction_majority = eligible_fraction * fractions[3];
+            pars_model.fraction_zealot = eligible_fraction * fractions[4];
 
-        pars_model.fraction_active = pars_model.fraction_vaccinated + pars_model.fraction_soon;
-        pars_model.threshold_opinion = 0.0;
+            pars_model.fraction_active = pars_model.fraction_vaccinated + pars_model.fraction_soon;
+            pars_model.threshold_opinion = 0.0;
+        }
+        _ => {}
     }
 
     let r0 = pars_model.r0;
@@ -244,7 +255,6 @@ pub fn run_epidemic(args: Args) {
     pars_model.rate_infection = beta;
 
     let pars_vaccination = VaccinationPars::new(
-        pars_model.flag_underage,
         pars_model.fraction_majority,
         pars_model.fraction_someone,
         pars_model.fraction_soon,
@@ -256,11 +266,6 @@ pub fn run_epidemic(args: Args) {
         pars_model.quota_vaccination,
         pars_model.rate_vaccination,
         pars_model.threshold_age,
-    );
-
-    agent_ensemble.set_vaccination_policy_model(
-        pars_vaccination.policy_vaccination,
-        pars_vaccination.quota_vaccination,
     );
 
     let flags_output = OutputFlags::new(
@@ -280,11 +285,22 @@ pub fn run_epidemic(args: Args) {
     for sim in 0..pars_model.nsims {
         println!("Dynamical realization={sim}");
 
-        agent_ensemble.introduce_vaccination_attitudes(
-            &pars_vaccination,
-            pars_model.model_opinion,
-            pars_model.threshold_opinion,
+        match pars_model.model_opinion {
+            OpinionModel::HomogeneousThresholds
+            | OpinionModel::HomogeneousThresholdsUnderage
+            | OpinionModel::HomogeneousZealots
+            | OpinionModel::HomogeneousZealotsUnderage => {
+                agent_ensemble.set_opinion_threshold(pars_model.threshold_opinion);
+            }
+            _ => {}
+        }
+
+        agent_ensemble.set_vaccination_policy_model(
+            pars_vaccination.policy_vaccination,
+            pars_vaccination.quota_vaccination,
         );
+
+        agent_ensemble.introduce_vaccination_attitudes(&pars_vaccination);
 
         agent_ensemble.introduce_infections_dd(pars_model.model_seed, pars_model.nseeds);
 

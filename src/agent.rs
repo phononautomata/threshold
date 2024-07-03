@@ -269,7 +269,7 @@ impl Agent {
         cumulative_neighbor_threshold / (degree as f64)
     }
 
-    pub fn measure_cascading_threshold(&mut self, agent_ensemble: &mut AgentEnsemble) -> usize {
+    fn measure_cascading_threshold(&mut self, agent_ensemble: &mut AgentEnsemble) -> usize {
         let neighbors = self.neighbors.clone();
         let threshold = self.threshold;
         let mut cumulative_neighbor_threshold = 0.0;
@@ -355,8 +355,8 @@ impl Agent {
         self.neighbors.len()
     }
 
-    fn set_threshold(&mut self, theta: f64) {
-        self.threshold = theta
+    fn set_threshold(&mut self, threshold_opinion: f64) {
+        self.threshold = threshold_opinion
     }
 
     fn vaccinated_neighbor_fraction(&mut self, neighbors: &Vec<Agent>) -> f64 {
@@ -386,7 +386,11 @@ impl AgentEnsemble {
         agent_ensemble
     }
 
-    pub fn new_from_multilayer(multilayer: &Multilayer, model_opinion: OpinionModel) -> Self {
+    pub fn new_from_multilayer(
+        multilayer: &Multilayer,
+        model_opinion: OpinionModel,
+        threshold_age: usize,
+    ) -> Self {
         let mut agent_ensemble = AgentEnsemble { inner: Vec::new() };
         for (_, node) in multilayer.inner().iter().enumerate() {
             let id = node.id;
@@ -401,7 +405,7 @@ impl AgentEnsemble {
                     let mut degree_opinion = 0;
                     for neighbor in node.neighbors.iter() {
                         let age_neighbor = multilayer.inner()[*neighbor].layer;
-                        if age_neighbor > CONST_UNDERAGE_THRESHOLD {
+                        if age_neighbor >= threshold_age {
                             degree_opinion += 1;
                         }
                     }
@@ -672,10 +676,8 @@ impl AgentEnsemble {
             .map(|(id, agent)| (id, agent.neighbors.len()))
             .collect();
 
-        // Sort by degree in decreasing order. If you want to sort by increasing order, use `.sort_by_key(|&(_, degree)| degree);`
         agents_with_degrees.sort_by(|a, b| b.1.cmp(&a.1));
 
-        // Extract the agent IDs, discarding the degrees
         let sorted_agent_ids: Vec<usize> =
             agents_with_degrees.into_iter().map(|(id, _)| id).collect();
 
@@ -855,14 +857,14 @@ impl AgentEnsemble {
                 if !intralayer_stubs[focal_layer].contains(&focal_id)
                     || *node_connections.get(&focal_id).unwrap_or(&0) >= focal_agent.degree
                 {
-                    break; // Focal node has reached its connection capacity or is no longer eligible
+                    break;
                 }
 
                 let target_layer = layer_dist.sample(&mut rng);
 
                 if intralayer_stubs[target_layer].is_empty() {
                     attempts += 1;
-                    continue; // Skip if the target layer is empty
+                    continue;
                 }
 
                 let target_index = rng.gen_range(0..intralayer_stubs[target_layer].len());
@@ -888,7 +890,6 @@ impl AgentEnsemble {
                         );
                     }
 
-                    // Update connection count for both focal and target nodes
                     *node_connections.entry(focal_id).or_insert(0) += 1;
                     *node_connections.entry(target_id).or_insert(0) += 1;
                 } else {
@@ -897,7 +898,6 @@ impl AgentEnsemble {
             }
         }
 
-        // Establish connections using IDs, considering each pair as a bidirectional connection.
         for &(focal_id, target_id) in &connection_pairs {
             if let Some(agent) = self.inner_mut().get_mut(focal_id) {
                 if !agent.neighbors.contains(&target_id) {
@@ -908,160 +908,6 @@ impl AgentEnsemble {
                 if !agent.neighbors.contains(&focal_id) {
                     agent.neighbors.push(focal_id);
                 }
-            }
-        }
-    }
-
-    pub fn introduce_infections(&mut self, model: SeedModel, nseeds: usize) {
-        match model {
-            SeedModel::BottomDegreeNeighborhood => {
-                let hub = self.find_bottom_degree_agent().unwrap();
-                let hub_neighs = self.inner()[hub].neighbors.clone();
-                let mut exhausted_seeds = nseeds - 1;
-
-                for idx in hub_neighs {
-                    if exhausted_seeds == 0 {
-                        break; // Stop infecting if no more seeds available
-                    }
-
-                    match self.inner_mut()[idx].status {
-                        Status::HesSus | Status::ActSus => {
-                            self.inner_mut()[idx].status = match self.inner_mut()[idx].status {
-                                Status::HesSus => Status::HesInf,
-                                Status::ActSus => Status::ActInf,
-                                _ => unreachable!(), // This line will never be reached
-                            };
-                            self.inner_mut()[idx].health = Health::Infected;
-                            exhausted_seeds -= 1;
-                        }
-                        _ => (),
-                    }
-                }
-                let effective_infected = nseeds - exhausted_seeds;
-                if FLAG_VERBOSE {
-                    println!("Effective infected individuals = {effective_infected}");
-                }
-            }
-            SeedModel::BottomDegreeMultiLocus => {
-                if FLAG_VERBOSE {
-                    println!("Sorry! Not implemented yet!");
-                }
-                todo!()
-            }
-            SeedModel::RandomMultiLocus => {
-                let mut rng = rand::thread_rng();
-                let nagents = self.number_of_agents();
-                let agent_indices: Vec<usize> = (0..nagents).collect();
-                let selected_indices = agent_indices.choose_multiple(&mut rng, nseeds);
-
-                for idx in selected_indices {
-                    match self.inner_mut()[*idx].status {
-                        Status::HesSus => {
-                            self.inner_mut()[*idx].status = Status::HesInf;
-                            self.inner_mut()[*idx].health = Health::Infected;
-                        }
-                        Status::ActSus => {
-                            self.inner_mut()[*idx].status = Status::ActInf;
-                            self.inner_mut()[*idx].health = Health::Infected;
-                        }
-                        _ => (),
-                    }
-                }
-            }
-            SeedModel::RandomNeighborhood => {
-                let mut rng = rand::thread_rng();
-                let nagents = self.number_of_agents();
-                let zero_patient = rng.gen_range(0..nagents);
-                let zp_neighs = self.inner()[zero_patient].neighbors.clone();
-                let mut exhausted_seeds = nseeds - 1;
-
-                for idx in zp_neighs {
-                    if exhausted_seeds == 0 {
-                        break; // Stop infecting if no more seeds available
-                    }
-
-                    match self.inner_mut()[idx].status {
-                        Status::HesSus | Status::ActSus => {
-                            self.inner_mut()[idx].status = match self.inner_mut()[idx].status {
-                                Status::HesSus => Status::HesInf,
-                                Status::ActSus => Status::ActInf,
-                                _ => unreachable!(), // This line will never be reached
-                            };
-                            self.inner_mut()[idx].health = Health::Infected;
-                            exhausted_seeds -= 1;
-                        }
-                        _ => (),
-                    }
-                }
-                let effective_infected = nseeds - exhausted_seeds;
-                if FLAG_VERBOSE {
-                    println!("Effective infected individuals = {effective_infected}");
-                }
-            }
-            SeedModel::TopDegreeMultiLocus => {
-                if FLAG_VERBOSE {
-                    println!("Sorry! Not implemented yet!")
-                }
-                todo!()
-            }
-            SeedModel::TopDegreeNeighborhood => {
-                let hub = self.find_top_degree_agent().unwrap();
-                let hub_neighs = self.inner()[hub].neighbors.clone();
-                let mut exhausted_seeds = nseeds - 1;
-
-                for idx in hub_neighs {
-                    if exhausted_seeds == 0 {
-                        break; // Stop infecting if no more seeds available
-                    }
-
-                    match self.inner_mut()[idx].status {
-                        Status::HesSus | Status::ActSus => {
-                            self.inner_mut()[idx].status = match self.inner_mut()[idx].status {
-                                Status::HesSus => Status::HesInf,
-                                Status::ActSus => Status::ActInf,
-                                _ => unreachable!(), // This line will never be reached
-                            };
-                            self.inner_mut()[idx].health = Health::Infected;
-                            exhausted_seeds -= 1;
-                        }
-                        _ => (),
-                    }
-                }
-                let effective_infected = nseeds - exhausted_seeds;
-                if FLAG_VERBOSE {
-                    println!("Effective infected individuals = {effective_infected}");
-                }
-            }
-        }
-    }
-
-    fn introduce_infections_and_vaccines(&mut self, nseeds: usize, nvaxx: usize) {
-        let mut rng = rand::thread_rng();
-        let nagents = self.number_of_agents();
-        let agent_indices: Vec<usize> = (0..nagents).collect();
-        let selected_indices = agent_indices.choose_multiple(&mut rng, nseeds);
-
-        for idx in selected_indices {
-            match self.inner_mut()[*idx].status {
-                Status::HesSus => self.inner_mut()[*idx].status = Status::HesInf,
-                Status::ActSus => self.inner_mut()[*idx].status = Status::ActInf,
-                _ => (),
-            }
-        }
-
-        let mut rng = rand::thread_rng();
-        let agent_indices: Vec<usize> = (0..self.number_of_agents()).collect();
-        let selected_indices = agent_indices.choose_multiple(&mut rng, nseeds + nvaxx);
-
-        for (count, &idx) in selected_indices.enumerate() {
-            if count < nseeds {
-                match self.inner_mut()[idx].status {
-                    Status::HesSus => self.inner_mut()[idx].status = Status::HesInf,
-                    Status::ActSus => self.inner_mut()[idx].status = Status::ActInf,
-                    _ => (),
-                }
-            } else {
-                self.inner_mut()[idx].status = Status::ActVac;
             }
         }
     }
@@ -1131,7 +977,7 @@ impl AgentEnsemble {
 
                 for idx in zp_neighs {
                     if exhausted_seeds == 0 {
-                        break; // Stop infecting if no more seeds available
+                        break;
                     }
 
                     match self.inner_mut()[idx].status {
@@ -1255,12 +1101,7 @@ impl AgentEnsemble {
         }
     }
 
-    pub fn introduce_vaccination_attitudes(
-        &mut self,
-        vpars: &VaccinationPars,
-        model_opinion: OpinionModel,
-        threshold_opinion: f64,
-    ) {
+    pub fn introduce_vaccination_attitudes(&mut self, vpars: &VaccinationPars) {
         let model_hesitancy = vpars.model_hesitancy;
         let nagents = self.number_of_agents();
 
@@ -1307,18 +1148,13 @@ impl AgentEnsemble {
                     } else if someone_assigned < someone_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Someone);
                         self.inner_mut()[i].status = Status::HesSus;
-                        let num_neighbors = self.inner()[i].number_of_neighbors();
+                        let num_neighbors = self.inner()[i].degree_opinion;
                         self.inner_mut()[i].threshold = 1.0 / num_neighbors as f64;
                         someone_assigned += 1;
                     } else if soon_assigned < soon_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Soon);
                         self.inner_mut()[i].status = Status::ActSus;
-                        self.inner_mut()[i].threshold =
-                            if model_opinion == OpinionModel::DataDrivenThresholds {
-                                CONST_SOON_THRESHOLD
-                            } else {
-                                threshold_opinion
-                            };
+                        self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
                         soon_assigned += 1;
                     } else if already_assigned < already_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1340,19 +1176,14 @@ impl AgentEnsemble {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Soon);
                             self.inner_mut()[i].status = Status::ActSus;
-                            self.inner_mut()[i].threshold =
-                                if model_opinion == OpinionModel::DataDrivenThresholds {
-                                    CONST_SOON_THRESHOLD
-                                } else {
-                                    threshold_opinion
-                                };
+                            self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
                             soon_assigned += 1;
                         }
                     } else if someone_assigned < someone_count {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Someone);
                             self.inner_mut()[i].status = Status::HesSus;
-                            let num_neighbors = self.inner()[i].number_of_neighbors();
+                            let num_neighbors = self.inner()[i].degree_opinion;
                             self.inner_mut()[i].threshold = 1.0 / num_neighbors as f64;
                             someone_assigned += 1;
                         }
@@ -1388,18 +1219,13 @@ impl AgentEnsemble {
                     } else if someone_assigned < someone_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Someone);
                         self.inner_mut()[i].status = Status::HesSus;
-                        let num_neighbors = self.inner()[i].number_of_neighbors();
+                        let num_neighbors = self.inner()[i].degree_opinion;
                         self.inner_mut()[i].threshold = 1.0 / num_neighbors as f64;
                         someone_assigned += 1;
                     } else if soon_assigned < soon_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Soon);
                         self.inner_mut()[i].status = Status::ActSus;
-                        self.inner_mut()[i].threshold =
-                            if model_opinion == OpinionModel::DataDrivenThresholds {
-                                CONST_SOON_THRESHOLD
-                            } else {
-                                threshold_opinion
-                            };
+                        self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
                         soon_assigned += 1;
                     } else if already_assigned < already_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1432,18 +1258,13 @@ impl AgentEnsemble {
                     } else if someone_assigned < someone_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Someone);
                         self.inner_mut()[i].status = Status::HesSus;
-                        let num_neighbors = self.inner()[i].number_of_neighbors();
+                        let num_neighbors = self.inner()[i].degree_opinion;
                         self.inner_mut()[i].threshold = 1.0 / num_neighbors as f64;
                         someone_assigned += 1;
                     } else if soon_assigned < soon_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Soon);
                         self.inner_mut()[i].status = Status::ActSus;
-                        self.inner_mut()[i].threshold =
-                            if model_opinion == OpinionModel::DataDrivenThresholds {
-                                CONST_SOON_THRESHOLD
-                            } else {
-                                threshold_opinion
-                            };
+                        self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
                         soon_assigned += 1;
                     } else if already_assigned < already_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1465,19 +1286,14 @@ impl AgentEnsemble {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Soon);
                             self.inner_mut()[i].status = Status::ActSus;
-                            self.inner_mut()[i].threshold =
-                                if model_opinion == OpinionModel::DataDrivenThresholds {
-                                    CONST_SOON_THRESHOLD
-                                } else {
-                                    threshold_opinion
-                                };
+                            self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
                             soon_assigned += 1;
                         }
                     } else if someone_assigned < someone_count {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Someone);
                             self.inner_mut()[i].status = Status::HesSus;
-                            let num_neighbors = self.inner()[i].number_of_neighbors();
+                            let num_neighbors = self.inner()[i].degree_opinion;
                             self.inner_mut()[i].threshold = 1.0 / num_neighbors as f64;
                             someone_assigned += 1;
                         }
@@ -1512,19 +1328,14 @@ impl AgentEnsemble {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Soon);
                             self.inner_mut()[i].status = Status::ActSus;
-                            self.inner_mut()[i].threshold =
-                                if model_opinion == OpinionModel::DataDrivenThresholds {
-                                    CONST_SOON_THRESHOLD
-                                } else {
-                                    threshold_opinion
-                                };
+                            self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
                             soon_assigned += 1;
                         }
                     } else if someone_assigned < someone_count {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Someone);
                             self.inner_mut()[i].status = Status::HesSus;
-                            let num_neighbors = self.inner()[i].number_of_neighbors();
+                            let num_neighbors = self.inner()[i].degree_opinion;
                             self.inner_mut()[i].threshold = 1.0 / num_neighbors as f64;
                             someone_assigned += 1;
                         }
@@ -1569,18 +1380,13 @@ impl AgentEnsemble {
                     } else if someone_assigned < someone_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Someone);
                         self.inner_mut()[i].status = Status::HesSus;
-                        let num_neighbors = self.inner()[i].number_of_neighbors();
+                        let num_neighbors = self.inner()[i].degree_opinion;
                         self.inner_mut()[i].threshold = 1.0 / num_neighbors as f64;
                         someone_assigned += 1;
                     } else if soon_assigned < soon_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Soon);
                         self.inner_mut()[i].status = Status::ActSus;
-                        self.inner_mut()[i].threshold =
-                            if model_opinion == OpinionModel::DataDrivenThresholds {
-                                CONST_SOON_THRESHOLD
-                            } else {
-                                threshold_opinion
-                            };
+                        self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
                         soon_assigned += 1;
                     } else if already_assigned < already_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1602,19 +1408,14 @@ impl AgentEnsemble {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Soon);
                             self.inner_mut()[i].status = Status::ActSus;
-                            self.inner_mut()[i].threshold =
-                                if model_opinion == OpinionModel::DataDrivenThresholds {
-                                    CONST_SOON_THRESHOLD
-                                } else {
-                                    threshold_opinion
-                                };
+                            self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
                             soon_assigned += 1;
                         }
                     } else if someone_assigned < someone_count {
                         if self.inner()[i].age >= age_threshold {
                             self.inner_mut()[i].attitude = Some(Attitude::Someone);
                             self.inner_mut()[i].status = Status::HesSus;
-                            let num_neighbors = self.inner()[i].number_of_neighbors();
+                            let num_neighbors = self.inner()[i].degree_opinion;
                             self.inner_mut()[i].threshold = 1.0 / num_neighbors as f64;
                             someone_assigned += 1;
                         }
@@ -1650,18 +1451,13 @@ impl AgentEnsemble {
                     } else if someone_assigned < someone_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Someone);
                         self.inner_mut()[i].status = Status::HesSus;
-                        let num_neighbors = self.inner()[i].number_of_neighbors();
+                        let num_neighbors = self.inner()[i].degree_opinion;
                         self.inner_mut()[i].threshold = 1.0 / num_neighbors as f64;
                         someone_assigned += 1;
                     } else if soon_assigned < soon_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Soon);
                         self.inner_mut()[i].status = Status::ActSus;
-                        self.inner_mut()[i].threshold =
-                            if model_opinion == OpinionModel::DataDrivenThresholds {
-                                CONST_SOON_THRESHOLD
-                            } else {
-                                threshold_opinion
-                            };
+                        self.inner_mut()[i].threshold = CONST_SOON_THRESHOLD;
                         soon_assigned += 1;
                     } else if already_assigned < already_count {
                         self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
@@ -1674,85 +1470,8 @@ impl AgentEnsemble {
         }
     }
 
-    pub fn introduce_vaccination_thresholds(
-        &mut self,
-        vpars: &VaccinationPars,
-        model_opinion: OpinionModel,
-        threshold_opinion: f64,
-    ) {
-        let nagents = self.number_of_agents();
-        let mut indices: Vec<usize> = (0..nagents).collect();
-        indices.shuffle(&mut rand::thread_rng());
-
-        let already_count = (vpars.fraction_vaccinated * nagents as f64) as i32;
-        let soon_count = (vpars.fraction_soon * nagents as f64) as i32;
-        let someone_count = (vpars.fraction_someone * nagents as f64) as i32;
-        let majority_count = (vpars.fraction_majority * nagents as f64) as i32;
-        let never_count = (vpars.fraction_zealot * nagents as f64) as i32;
-
-        let mut already_assigned = 0;
-        let mut soon_assigned = 0;
-        let mut someone_assigned = 0;
-        let mut majority_assigned = 0;
-        let mut never_assigned = 0;
-
-        for i in indices {
-            if already_assigned < already_count {
-                self.inner_mut()[i].attitude = Some(Attitude::Vaccinated);
-                self.inner_mut()[i].status = Status::ActVac;
-                self.inner_mut()[i].threshold = CONST_ALREADY_THRESHOLD;
-                already_assigned += 1;
-            } else if soon_assigned < soon_count {
-                self.inner_mut()[i].attitude = Some(Attitude::Soon);
-                self.inner_mut()[i].status = Status::ActSus;
-                self.inner_mut()[i].threshold =
-                    if model_opinion == OpinionModel::DataDrivenThresholds {
-                        CONST_SOON_THRESHOLD
-                    } else {
-                        threshold_opinion
-                    };
-                soon_assigned += 1;
-            } else if someone_assigned < someone_count {
-                self.inner_mut()[i].attitude = Some(Attitude::Someone);
-                self.inner_mut()[i].status = Status::HesSus;
-                let num_neighbors = self.inner()[i].number_of_neighbors();
-                self.inner_mut()[i].threshold = 1.0 / num_neighbors as f64;
-                someone_assigned += 1;
-            } else if majority_assigned < majority_count {
-                self.inner_mut()[i].attitude = Some(Attitude::Most);
-                self.inner_mut()[i].status = Status::HesSus;
-                self.inner_mut()[i].threshold = CONST_MAJORITY_THRESHOLD;
-                majority_assigned += 1;
-            } else if never_assigned < never_count {
-                self.inner_mut()[i].attitude = Some(Attitude::Never);
-                self.inner_mut()[i].status = Status::HesSus;
-                self.inner_mut()[i].threshold = CONST_ZEALOT_THRESHOLD;
-                never_assigned += 1;
-            }
-        }
-    }
-
     pub fn number_of_agents(&self) -> usize {
         self.inner.len()
-    }
-
-    fn reintroduce_infections(&mut self, nseeds: usize) {
-        let mut rng = rand::thread_rng();
-        let nagents = self.number_of_agents();
-        let agent_indices: Vec<usize> = (0..nagents).collect();
-        let mut selected_indices: Vec<usize> = vec![];
-
-        while selected_indices.len() < nseeds {
-            let idx = agent_indices.choose(&mut rng).unwrap();
-            if let Status::HesSus | Status::ActSus = self.inner_mut()[*idx].status {
-                self.inner_mut()[*idx].status = match self.inner_mut()[*idx].status {
-                    Status::HesSus => Status::HesInf,
-                    Status::ActSus => Status::ActInf,
-                    _ => unreachable!(),
-                };
-                selected_indices.push(*idx);
-            }
-        }
     }
 
     pub fn set_opinion_threshold(&mut self, threshold: f64) {
@@ -1886,9 +1605,9 @@ impl AgentEnsemble {
 
         let mut agents: Vec<_> = self
             .inner()
-            .iter() // Use .iter() to get an iterator over the agents
+            .iter()
             .filter(|agent| agent.age >= CONST_UNDERAGE_THRESHOLD)
-            .collect::<Vec<&Agent>>(); // Collect into a vector of references to Agent
+            .collect::<Vec<&Agent>>();
 
         // Now sort this vector of references by age in descending order
         agents.sort_by(|a, b| a.age.cmp(&b.age));

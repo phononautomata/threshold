@@ -859,7 +859,6 @@ impl GlobalOutput {
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct InputMultilayer {
-    pub flag_underage: bool,
     pub fraction_active: f64,
     pub fraction_majority: f64,
     pub fraction_someone: f64,
@@ -886,7 +885,6 @@ pub struct InputMultilayer {
 
 impl InputMultilayer {
     pub fn new(
-        flag_underage: bool,
         fraction_active: f64,
         fraction_majority: f64,
         fraction_someone: f64,
@@ -911,7 +909,6 @@ impl InputMultilayer {
         threshold_opinion: f64,
     ) -> Self {
         Self {
-            flag_underage,
             fraction_active,
             fraction_majority,
             fraction_someone,
@@ -2159,7 +2156,6 @@ struct VaccinationData {
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct VaccinationPars {
-    pub flag_underage: bool,
     pub fraction_majority: f64,
     pub fraction_someone: f64,
     pub fraction_soon: f64,
@@ -2175,7 +2171,6 @@ pub struct VaccinationPars {
 
 impl VaccinationPars {
     pub fn new(
-        flag_underage: bool,
         fraction_majority: f64,
         fraction_someone: f64,
         fraction_soon: f64,
@@ -2189,7 +2184,6 @@ impl VaccinationPars {
         threshold_age: usize,
     ) -> Self {
         Self {
-            flag_underage,
             fraction_majority,
             fraction_someone,
             fraction_soon,
@@ -2789,8 +2783,7 @@ fn compute_stats(values: &Vec<Vec<f64>>) -> StatPacker {
 }
 
 pub fn construct_string_epidemic(model_pars: &InputMultilayer) -> String {
-    format!("ua{0}_fa{1:.2}_th{2:.2}_rv{3}_fz{4:.2}_mh{5}_mo{6}_ms{7}_nse{8}_nsi{9}_pv{10}_qv{11}_r0{12}_rr{13}_tm{14}_ta{15}",
-        model_pars.flag_underage,
+    format!("epi_fa{0:.2}_th{1:.2}_rv{2}_fz{3:.2}_mh{4}_mo{5}_ms{6}_nse{7}_nsi{8}_pv{9}_qv{10}_r0{11}_rr{12}_tm{13}_ta{14}",
         model_pars.fraction_active,
         model_pars.threshold_opinion,
         model_pars.rate_vaccination,

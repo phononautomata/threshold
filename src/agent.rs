@@ -68,9 +68,13 @@ pub enum Opinion {
 pub enum OpinionModel {
     ElderCare,
     DataDrivenThresholds,
+    DataDrivenThresholdsUnderage,
     HomogeneousThresholds,
-    HomogeneousWithZealots,
+    HomogeneousThresholdsUnderage,
+    HomogeneousZealots,
+    HomogeneousZealotsUnderage,
     Majority,
+    MajorityUnderage,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug, Display, clap::ValueEnum)]
@@ -139,6 +143,7 @@ pub enum VaccinationPolicy {
 pub struct Agent {
     pub age: usize,
     pub degree: usize,
+    pub degree_opinion: usize,
     pub health: Health,
     pub id: usize,
     pub neighbors: Vec<usize>,
@@ -169,6 +174,7 @@ impl Agent {
         Self {
             age: 0,
             degree: 0,
+            degree_opinion: 0,
             health: Health::Susceptible,
             id: agent_id,
             neighbors: Vec::new(),
@@ -194,10 +200,17 @@ impl Agent {
         }
     }
 
-    pub fn new_from_node(layer: usize, degree: usize, id: usize, neighbors: Vec<usize>) -> Self {
+    pub fn new_from_node(
+        layer: usize,
+        degree: usize,
+        degree_opinion: usize,
+        id: usize,
+        neighbors: Vec<usize>,
+    ) -> Self {
         Self {
             age: layer,
             degree,
+            degree_opinion,
             health: Health::Susceptible,
             id,
             neighbors,
@@ -373,14 +386,32 @@ impl AgentEnsemble {
         agent_ensemble
     }
 
-    pub fn new_from_multilayer(multilayer: &Multilayer) -> Self {
+    pub fn new_from_multilayer(multilayer: &Multilayer, model_opinion: OpinionModel) -> Self {
         let mut agent_ensemble = AgentEnsemble { inner: Vec::new() };
         for (_, node) in multilayer.inner().iter().enumerate() {
             let id = node.id;
             let age = node.layer;
             let degree = node.degree;
+
+            let degree_opinion = match model_opinion {
+                OpinionModel::DataDrivenThresholdsUnderage
+                | OpinionModel::HomogeneousThresholdsUnderage
+                | OpinionModel::HomogeneousZealotsUnderage
+                | OpinionModel::MajorityUnderage => {
+                    let mut degree_opinion = 0;
+                    for neighbor in node.neighbors.iter() {
+                        let age_neighbor = multilayer.inner()[*neighbor].layer;
+                        if age_neighbor > CONST_UNDERAGE_THRESHOLD {
+                            degree_opinion += 1;
+                        }
+                    }
+                    degree_opinion
+                }
+                _ => degree,
+            };
+
             let neighbors = node.neighbors.clone();
-            let agent = Agent::new_from_node(age, degree, id, neighbors);
+            let agent = Agent::new_from_node(age, degree, degree_opinion, id, neighbors);
             agent_ensemble.inner.push(agent);
         }
         agent_ensemble

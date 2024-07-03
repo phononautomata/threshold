@@ -202,7 +202,8 @@ pub fn run_epidemic(args: Args) {
     let node_ensemble = load_multilayer_object(&path_multilayer);
     let nagents = node_ensemble.number_of_nodes();
 
-    let mut agent_ensemble = AgentEnsemble::new_from_multilayer(&node_ensemble);
+    let mut agent_ensemble =
+        AgentEnsemble::new_from_multilayer(&node_ensemble, pars_model.model_opinion);
 
     let population_filename = FILENAME_DATA_POPULATION_AGE;
     let population_vector: Vec<f64> =
@@ -219,7 +220,7 @@ pub fn run_epidemic(args: Args) {
     if pars_model.model_opinion == OpinionModel::HomogeneousThresholds {
         pars_model.fraction_soon = pars_model.fraction_active;
         pars_model.fraction_zealot = 0.0;
-    } else if pars_model.model_opinion == OpinionModel::HomogeneousWithZealots {
+    } else if pars_model.model_opinion == OpinionModel::HomogeneousZealots {
         pars_model.fraction_soon = pars_model.fraction_active;
     } else if pars_model.model_opinion == OpinionModel::DataDrivenThresholds {
         let dd_vac_filename = FILENAME_DATA_VACCINATION_ATTITUDE;

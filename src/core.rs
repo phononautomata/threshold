@@ -200,16 +200,15 @@ fn infection_and_removal_step_subensemble(
     infection_decay: f64,
     t: usize,
 ) -> (Vec<usize>, Vec<usize>) {
-    // Infection & removal steps for all types of infected agents //hi_list: focal, ai_list: collateral, hr_list: branching
     let removal_rate = infection_decay;
-    let mut new_focal_list = Vec::new(); //focal_list.clone();
+    let mut new_focal_list = Vec::new();
     let mut new_collateral_list = collateral_list.to_owned();
     for a in focal_list.iter() {
         let agent_id = *a;
-        // Perform infection step for focal agent
+
         let (new_hes_inf, new_act_inf) =
             infection_step_agent(agent_id, agent_ensemble, infection_rate);
-        // Update new infected statuses
+
         for hi in new_hes_inf.iter() {
             agent_ensemble.inner_mut()[*hi].status = Status::HesInf;
             agent_ensemble.inner_mut()[*hi].infected_when = Some(t);
@@ -220,7 +219,7 @@ fn infection_and_removal_step_subensemble(
             agent_ensemble.inner_mut()[*ai].infected_when = Some(t);
             agent_ensemble.inner_mut()[*ai].infected_by = Some(*a);
         }
-        // Update infected lists
+
         if focal_status == Status::HesInf {
             new_focal_list.extend(new_hes_inf);
             new_collateral_list.extend(new_act_inf);
@@ -228,7 +227,7 @@ fn infection_and_removal_step_subensemble(
             new_focal_list.extend(new_act_inf);
             new_collateral_list.extend(new_hes_inf);
         }
-        // Perform removal step for focal agent. Then update status & list
+
         let change = removal_step_agent(removal_rate);
         if change {
             if focal_status == Status::HesInf {
@@ -319,7 +318,7 @@ fn vaccination_step_subensemble(
 fn watts_threshold_step_agent(agent_id: usize, agent_ensemble: &AgentEnsemble) -> bool {
     let status = agent_ensemble.inner()[agent_id].status;
     let neighbors = agent_ensemble.inner()[agent_id].neighbors.clone();
-    let k = neighbors.len();
+    let degree_opinion = agent_ensemble.inner()[agent_id].degree_opinion;
 
     let mut vaccinated_neighbors = 0.0;
     for neigh in neighbors {
@@ -327,7 +326,12 @@ fn watts_threshold_step_agent(agent_id: usize, agent_ensemble: &AgentEnsemble) -
             vaccinated_neighbors += 1.0;
         }
     }
-    let vaccinated_fraction = vaccinated_neighbors / k as f64;
+
+    let vaccinated_fraction = if degree_opinion == 0 {
+        0.0
+    } else {
+        vaccinated_neighbors / degree_opinion as f64
+    };
 
     if vaccinated_fraction >= agent_ensemble.inner()[agent_id].threshold {
         matches!(status, Status::HesSus | Status::HesInf | Status::HesRem)

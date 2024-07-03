@@ -443,23 +443,27 @@ def plot_panel_survey_thresholds_vaccination_curves(
     vmax = 0.65
     norm = Normalize(vmin=vmin, vmax=vmax)
 
-    for _, state_key in enumerate(dict_stats.keys()):
-        var_values = sorted(dict_stats[state_key].keys())
+    for _, model_region in enumerate(dict_stats.keys()):
+        array_rv = sorted(dict_stats[model_region].keys())
 
-        stats_values = [dict_stats[state_key][var_key] for var_key in var_values]
+        stats_values = [dict_stats[model_region][rv] for rv in array_rv]
 
         conv_avg = np.array([obs['convinced']['avg'] if 'convinced' in obs and 'avg' in obs['convinced'] else np.nan for obs in list(stats_values)])
         conv_l95 = np.array([obs['convinced']['l95'] if 'convinced' in obs and 'l95' in obs['convinced'] else np.nan for obs in list(stats_values)])
         conv_u95 = np.array([obs['convinced']['u95'] if 'convinced' in obs and 'u95' in obs['convinced'] else np.nan for obs in list(stats_values)])
 
-        vac_shares = dict_state_attitude[state_key]
-        already = vac_shares['already']
-        soon = vac_shares['soon']
-        initial_support = already + soon
-        zealots = vac_shares['never']
+        vac_shares = dict_state_attitude[model_region]
+        if 'Underage' in model_opinion or 'UA' in model_opinion:
+            array_population = ut.import_age_distribution(state=model_region, reference=False, year=2019, path=path_cwd)
+            fraction_underage = ut.count_fraction_underage(array_population)
+            fraction_eligible = 1.0 - fraction_underage
+        else:
+            fraction_eligible = 1.0
 
-        already = dict_state_attitude[state_key]['already']
-        soon = dict_state_attitude[state_key]['soon']  
+        already = fraction_eligible * vac_shares['already']
+        soon = fraction_eligible * vac_shares['soon']
+        initial_support = already + soon
+        zealots = fraction_eligible * vac_shares['never']
 
         max_change = 1.0 - (already + soon + zealots)
         delta_con_avg = [(con - initial_support) / max_change for con in conv_avg]
@@ -476,16 +480,16 @@ def plot_panel_survey_thresholds_vaccination_curves(
 
         color = plt.cm.viridis(norm(initial_support))
 
-        ax[0].scatter(var_values, delta_con_avg, color=color)
-        ax[0].fill_between(var_values, delta_con_l95, delta_con_u95, color=color, alpha=0.2)
-        ax[1].scatter(var_values, vacc_avg, color=color)
-        ax[1].fill_between(var_values, vacc_l95, vacc_u95, color=color, alpha=0.2)
-        ax[2].scatter(var_values, prev_avg, color=color)
-        ax[2].fill_between(var_values, prev_l95, prev_u95, color=color, alpha=0.2)
+        ax[0].scatter(array_rv, delta_con_avg, color=color)
+        ax[0].fill_between(array_rv, delta_con_l95, delta_con_u95, color=color, alpha=0.2)
+        ax[1].scatter(array_rv, vacc_avg, color=color)
+        ax[1].fill_between(array_rv, vacc_l95, vacc_u95, color=color, alpha=0.2)
+        ax[2].scatter(array_rv, prev_avg, color=color)
+        ax[2].fill_between(array_rv, prev_l95, prev_u95, color=color, alpha=0.2)
         ax[2].axvline(0.09,linestyle='dashed', color='gray')
 
-        state_code = ut.extract_code_from_state(state_key)
-        ut.write_annotations_vaccination_curves(state_code, ax,  var_values, vacc_avg, prev_avg)
+        state_code = ut.extract_code_from_state(model_region)
+        ut.write_annotations_vaccination_curves(state_code, ax, array_rv, vacc_avg, prev_avg)
 
     cbar_ml = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='viridis'), ax=ax[2], orientation='vertical')
     cbar_ml.set_label(r'$v(0)+n_A(0)$', size=25)

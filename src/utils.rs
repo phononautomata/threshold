@@ -2928,6 +2928,13 @@ fn convert_enum_opinion_to_string(model_opinion: OpinionModel, flag_short: bool)
                 "DataDriven".to_owned()
             }
         }
+        OpinionModel::DataDrivenThresholdsUnderage => {
+            if flag_short {
+                "DDUA".to_owned()
+            } else {
+                "DataDrivenUnderage".to_owned()
+            }
+        }
         OpinionModel::ElderCare => {
             if flag_short {
                 "EC".to_owned()
@@ -2942,11 +2949,25 @@ fn convert_enum_opinion_to_string(model_opinion: OpinionModel, flag_short: bool)
                 "HomogeneousThresholds".to_owned()
             }
         }
-        OpinionModel::HomogeneousWithZealots => {
+        OpinionModel::HomogeneousThresholdsUnderage => {
             if flag_short {
-                "HWZ".to_owned()
+                "HOTUA".to_owned()
+            } else {
+                "HomogeneousThresholdsUnderage".to_owned()
+            }
+        }
+        OpinionModel::HomogeneousZealots => {
+            if flag_short {
+                "HZ".to_owned()
             } else {
                 "HomogeneousWithZealots".to_owned()
+            }
+        }
+        OpinionModel::HomogeneousZealotsUnderage => {
+            if flag_short {
+                "HZUA".to_owned()
+            } else {
+                "HomogeneousZealotsUnderage".to_owned()
             }
         }
         OpinionModel::Majority => {
@@ -2954,6 +2975,13 @@ fn convert_enum_opinion_to_string(model_opinion: OpinionModel, flag_short: bool)
                 "MAJ".to_owned()
             } else {
                 "Majority".to_owned()
+            }
+        }
+        OpinionModel::MajorityUnderage => {
+            if flag_short {
+                "MAJUA".to_owned()
+            } else {
+                "MajorityUnderage".to_owned()
             }
         }
     }

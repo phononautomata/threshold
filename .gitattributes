@@ -1,2 +1,4 @@
 #*.csv filter=lfs diff=lfs merge=lfs -text
 #*.pickle filter=lfs diff=lfs merge=lfs -text
+Dockerfile filter=lfs diff=lfs merge=lfs -text
+Makefile filter=lfs diff=lfs merge=lfs -text

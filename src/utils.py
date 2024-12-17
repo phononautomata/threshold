@@ -9,6 +9,8 @@ import urllib.request
 
 from bs4 import BeautifulSoup
 from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from scipy.stats import norm
 
 cwd_path = os.getcwd()
 
@@ -52,7 +54,6 @@ def coarse_grain_population(pop_a, ngroups):
         sum_group += count
         counter += 1
 
-        # Check if we have reached the end of a group
         if counter == group_size + (1 if remainder > 0 else 0):
             new_pop_a.append(sum_group)
             sum_group = 0
@@ -73,10 +74,8 @@ def coarse_grain_contact(contact, ngroups):
     row_remainder = rows % ngroups
     col_remainder = cols % ngroups
 
-    # Initialize the new matrix
     new_contact = np.zeros((ngroups, ngroups))
 
-    # Aggregate matrix elements
     for i in range(ngroups):
         for j in range(ngroups):
             row_start = i * row_group_size + min(i, row_remainder)
@@ -178,6 +177,18 @@ def compute_distribution_statistics(dist):
     dist_dict['nsims'] = nsims
     
     return dist_dict
+
+def correlation_ci(data1, data2, alpha=0.05):
+    r = np.corrcoef(data1, data2)[0, 1]
+
+    # Fisher transformation
+    z = np.arctanh(r)
+    se = 1 / np.sqrt(len(data1) - 3)
+    z_critical = norm.ppf(1 - alpha/2)
+    z_interval = z + np.array([-1, 1]) * z_critical * se
+    r_interval = np.tanh(z_interval)
+    
+    return r, r_interval
 
 def convert_string_state_to_rust_enum_format(state):
     words = state.replace('_', ' ').split()

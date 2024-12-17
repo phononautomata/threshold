@@ -39,7 +39,6 @@ list_fraction_zealot="0.0"
 
 model_hesitancy="random"
 
-# Prepare and execute the parallel jobs
 for uuid in "${list_uuid[@]}"; do
     for active in $list_fraction_active; do
         for threshold in $list_threshold_opinion; do

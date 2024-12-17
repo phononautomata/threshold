@@ -1,46 +1,19 @@
 
-# Project: THRESHOLD
+# Interplay of epidemic spreading and vaccine uptake under complex social contagion
 
-This repository hosts the code for the work developed in QUOTE:THRESHOLD.
+This repository hosts the code for the work *Interplay of epidemic spreading and vaccine uptake under complex social contagion* by de Miguel-Arribas et al. The work is currently a pre-print on [https://arxiv.org/abs/2412.11766](ArXiv).
 
-In the aforementioned reference we aimed to study the coupling of stochastic dynamical processes of different natures on a networked population. The spreading of epidemics is typically modeled through pairwise interactions thus constituting what is known as a simple contagion process. Vaccination dynamics on the other hand is quite simple, being typically modeled as a spontaneous (automatic) transition. By 'automatic' here I refer to the lack of agency in the vaccination process itself of the agent to be vaccinated. However, here comes the catch, to be vaccinated or not is a behavioral attitude that may vary from individual to individual. Thus, what makes an individual to adopt a pro-vaccine stance? Whereas some individuals may assess more rationally (or not) the pros and cons of being vaccinated to make a decision, others may look at their social peers to make up their minds. Therefore, at least for some, adopting pro-vaccine opinion could be understood as a social contagion process. Moreover, a social contagion process that depends not on pairwise interactions but on the overall status of a group of individuals. This leads us to the concept of complex contagion and higher-order interactions.
+Abstract:
 
-In brief, we aimed to assess the coupled dynamics of an epidemic spreading and a vaccination campaign where individuals' pro-vaccine stance is subjected to threshold-based (Watts-Granovetter) opinion dynamics. Far from a fabricated thought experiment, posing vaccination-opinion dynamics as a higher-order threshold process has been inspired by some surveys on vaccine attitudes within the COVID-19 vaccination campaign that started in late 2020.
-
-## Getting Started
-
-These instructions will guide you through setting up the project on your local machine. This project is structured to use Python for scripting and automation, Rust for performance-critical components, and Docker for creating a consistent development and deployment environment.
+Modeling human behavior is essential to accurately predict epidemic spread, with behaviors like vaccine hesitancy complicating control efforts. While epidemic spread is often treated as a simple contagion, vaccine uptake may follow complex contagion dynamics, where individuals' decisions depend on multiple social contacts. Recently, the concept of complex contagion has received strong theoretical underpinnings thanks to the generalization of spreading phenomena from pairwise to higher-order interactions. Although several potential applications have been suggested, examples of complex contagions motivated by real data remain scarce. Surveys on COVID-19 vaccine hesitancy in the US suggest that vaccination attitudes may indeed depend on the vaccination status of social peers, aligning with complex contagion principles. In this work, we examine the interactions between epidemic spread, vaccination, and vaccine uptake attitudes under complex contagion. Using the SIR model with a dynamic, threshold-based vaccination campaign, we simulate scenarios on an age-structured multilayer network informed by US contact data. Our results offer insights into the role of social dynamics in shaping vaccination behavior and epidemic outcomes.
 
 ### Prerequisites
 
-Before you start, ensure you have the following installed on your system:
+...
 
-- **Git**: For cloning the repository.
-- **Python**: This project uses Python for some scripting and analysis utilities. [Download and install Python](https://www.python.org/downloads/). This project has been tested with Python 3.9.
-- **Jupyter Notebooks**: For reproducing curated results and generating figures, Jupyter notebooks are used. After installing Python, Jupyter can be installed via pip.
-- **Rust**: Model's core is written in Rust. [Install Rust](https://www.rust-lang.org/tools/install) by following the official instructions.
-- **Docker**: For ease of setup and deployment, this project is containerized with Docker. [Install Docker Desktop](https://docs.docker.com/desktop/) for your operating system.
+## Installation
 
-### Installation
-
-Follow these steps to get your development environment running:
-
-1. **Clone the Repository**:
-   Start by cloning the project repository to your local machine.
-   ```bash
-   git clone https://github.com/phononautomata/threshold.git
-   ```
-
-2. **Run the Makefile**:
-   From your terminal, navigate to the project directory:
-   ```bash
-   cd threshold
-   ```
-   And execute:
-   ```bash
-   make setup
-   ```
-   This command automatically sets up the project environment. Specifically, it creates a Python virtual environment, installs required Python packages, and compiles Rust components.
+...
 
 ## Project Structure
 
